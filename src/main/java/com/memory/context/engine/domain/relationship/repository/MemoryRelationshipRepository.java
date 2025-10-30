@@ -1,0 +1,52 @@
+package com.memory.context.engine.domain.relationship.repository;
+
+import com.memory.context.engine.domain.relationship.entity.MemoryRelationship;
+import com.memory.context.engine.domain.relationship.entity.RelationshipType;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.util.List;
+
+/**
+ * Repository for memory relationships.
+ */
+public interface MemoryRelationshipRepository extends JpaRepository<MemoryRelationship, Long> {
+
+        List<MemoryRelationship> findBySourceMemoryId(Long sourceMemoryId);
+
+        List<MemoryRelationship> findByTargetMemoryId(Long targetMemoryId);
+
+        List<MemoryRelationship> findBySourceMemoryIdAndRelationshipType(
+                        Long sourceMemoryId,
+                        RelationshipType type);
+
+        @Query("""
+                        SELECT r FROM MemoryRelationship r
+                        WHERE (r.sourceMemory.id = :memoryId OR r.targetMemory.id = :memoryId)
+                        AND r.sourceMemory.archived = false
+                        AND r.targetMemory.archived = false
+                        """)
+        List<MemoryRelationship> findAllConnected(Long memoryId);
+
+        @Query("""
+                        SELECT r FROM MemoryRelationship r
+                        WHERE (r.sourceMemory.id IN :memoryIds OR r.targetMemory.id IN :memoryIds)
+                        AND r.sourceMemory.archived = false
+                        AND r.targetMemory.archived = false
+                        """)
+        List<MemoryRelationship> findAllByMemoryIds(java.util.Collection<Long> memoryIds);
+
+        boolean existsBySourceMemoryIdAndTargetMemoryIdAndRelationshipType(
+                        Long sourceId,
+                        Long targetId,
+                        RelationshipType type);
+
+        @Modifying
+        @Query("""
+                        DELETE FROM MemoryRelationship r
+                        WHERE r.sourceMemory.id IN :memoryIds OR r.targetMemory.id IN :memoryIds
+                        """)
+        void deleteAllByMemoryIds(@Param("memoryIds") java.util.Collection<Long> memoryIds);
+}
