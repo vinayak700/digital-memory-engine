@@ -20,13 +20,21 @@ public class MemoryRelationship {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private Long fromMemoryId;
-    private Long toMemoryId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "from_memory_id", nullable = false)
+    private Memory fromMemory;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "to_memory_id", nullable = false)
+    private Memory toMemory;
 
     @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private RelationshipType type;
 
+    @Column(nullable = false)
     private int weight;
 
+    @Column(name = "created_at", updatable = false)
     private Instant createdAt;
 }

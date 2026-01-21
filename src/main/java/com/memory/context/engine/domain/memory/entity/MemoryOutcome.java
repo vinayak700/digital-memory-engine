@@ -15,12 +15,16 @@ public class MemoryOutcome {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private Long memoryId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "memory_id", nullable = false, foreignKey = @ForeignKey(name = "fk_memory_outcome"))
+    private Memory memory;
 
     @Column(columnDefinition = "TEXT")
     private String outcomeSummary;
 
+    @Column(nullable = false)
     private int satisfactionScore; // -5 to +5
 
+    @Column
     private Instant recordedAt;
 }

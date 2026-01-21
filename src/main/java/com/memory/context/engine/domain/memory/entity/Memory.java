@@ -1,18 +1,24 @@
 package com.memory.context.engine.domain.memory.entity;
 
+import com.memory.context.engine.infrastructure.jpa.JsonMapConverter;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
+import java.util.Map;
 
 @Entity
-@Table(name = "memories",
+@Table(
+        name = "memories",
         indexes = {
-                @Index(name = "idx_memory_user", columnList = "userId"),
-                @Index(name = "idx_memory_created", columnList = "createdAt")
-        })
+                @Index(name = "idx_memory_user", columnList = "user_id"),
+                @Index(name = "idx_memory_created", columnList = "created_at")
+        }
+)
 @Data
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@NoArgsConstructor
 @AllArgsConstructor
 @Builder
 public class Memory {
@@ -21,22 +27,24 @@ public class Memory {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
+    @Column(name = "user_id", nullable = false)
     private String userId;
 
     @Column(nullable = false)
-    private String title;
+    public String title;
 
     @Column(columnDefinition = "TEXT", nullable = false)
     private String content;
 
-    /**
-     * Flexible context (time, mood, constraints, environment)
-     */
     @Column(columnDefinition = "jsonb")
-    private String contextJson;
+    @JdbcTypeCode(SqlTypes.JSON)
+    private Map<String, Object> context;
 
+    @Column(nullable = false)
     private int importanceScore;
+
+    @Column(nullable = false)
+    private boolean archived = false;
 
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;
@@ -44,19 +52,15 @@ public class Memory {
     @Column(name = "updated_at")
     private Instant updatedAt;
 
-    private boolean archived;
-
     @PrePersist
     protected void onCreate() {
         Instant now = Instant.now();
-        if (createdAt == null) {
-            createdAt = now;
-        }
-        updatedAt = now;
+        this.createdAt = now;
+        this.updatedAt = now;
     }
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = Instant.now();
+        this.updatedAt = Instant.now();
     }
 }
