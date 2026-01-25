@@ -23,7 +23,7 @@ public class MemoryOutcome {
     private String outcomeSummary;
 
     @Column(nullable = false)
-    private int satisfactionScore; // -5 to +5
+    private int satisfactionScore;
 
     @Column
     private Instant recordedAt;

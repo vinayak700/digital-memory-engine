@@ -35,7 +35,7 @@ public class MemoryController {
     }
 
     @GetMapping
-    public ResponseEntity<Page<MemoryResponse>> getMemories(@PageableDefault(
+    public ResponseEntity<List<MemoryResponse>> getMemories(@PageableDefault(
             size = 10,
             sort = "createdAt",
             direction = Sort.Direction.DESC) Pageable pageable) {

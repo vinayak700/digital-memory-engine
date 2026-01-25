@@ -17,79 +17,70 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    // -------------------- VALIDATION --------------------
+        // -------------------- VALIDATION --------------------
 
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ApiErrorResponse> handleValidation(
-            MethodArgumentNotValidException ex,
-            HttpServletRequest request
-    ) {
-        Map<String, String> errors = ex.getBindingResult()
-                .getFieldErrors()
-                .stream()
-                .collect(Collectors.toMap(
-                        FieldError::getField,
-                        FieldError::getDefaultMessage,
-                        (a, b) -> a
-                ));
+        @ExceptionHandler(MethodArgumentNotValidException.class)
+        public ResponseEntity<ApiErrorResponse> handleValidation(
+                        MethodArgumentNotValidException ex,
+                        HttpServletRequest request) {
+                Map<String, String> errors = ex.getBindingResult()
+                                .getFieldErrors()
+                                .stream()
+                                .collect(Collectors.toMap(
+                                                FieldError::getField,
+                                                FieldError::getDefaultMessage,
+                                                (a, b) -> a));
 
-        return ResponseEntity.badRequest().body(
-                ApiErrorResponse.builder()
-                        .code("VALIDATION_ERROR")
-                        .message("Validation failed")
-                        .details(errors)
-                        .build()
-        );
-    }
+                return ResponseEntity.badRequest().body(
+                                ApiErrorResponse.builder()
+                                                .code("VALIDATION_ERROR")
+                                                .message("Validation failed")
+                                                .details(errors)
+                                                .build());
+        }
 
+        // -------------------- DOMAIN --------------------
 
-    // -------------------- DOMAIN --------------------
+        @ExceptionHandler(DomainException.class)
+        public ResponseEntity<ApiErrorResponse> handleDomain(
+                        DomainException ex,
+                        HttpServletRequest request) {
+                HttpStatus status = switch (ex.getCode()) {
+                        case "RESOURCE_NOT_FOUND" -> HttpStatus.NOT_FOUND;
+                        case "ACCESS_DENIED" -> HttpStatus.FORBIDDEN;
+                        case "INVALID_MEMORY_STATE" -> HttpStatus.CONFLICT;
+                        default -> HttpStatus.BAD_REQUEST;
+                };
 
-    @ExceptionHandler(DomainException.class)
-    public ResponseEntity<ApiErrorResponse> handleDomain(
-            DomainException ex,
-            HttpServletRequest request
-    ) {
-        HttpStatus status = switch (ex.getCode()) {
-            case "RESOURCE_NOT_FOUND" -> HttpStatus.NOT_FOUND;
-            case "ACCESS_DENIED" -> HttpStatus.FORBIDDEN;
-            case "INVALID_MEMORY_STATE" -> HttpStatus.CONFLICT;
-            default -> HttpStatus.BAD_REQUEST;
-        };
+                return ResponseEntity.status(status).body(
+                                ApiErrorResponse.builder()
+                                                .code(ex.getCode())
+                                                .message(ex.getMessage())
+                                                .build());
+        }
 
-        return ResponseEntity.status(status).body(
-                ApiErrorResponse.builder()
-                        .code(ex.getCode())
-                        .message(ex.getMessage())
-                        .build()
-        );
-    }
+        // -------------------- FALLBACK --------------------
 
-    // -------------------- FALLBACK --------------------
+        @ExceptionHandler(Exception.class)
+        public ResponseEntity<ApiErrorResponse> handleUnexpected(
+                        Exception ex,
+                        HttpServletRequest request) {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                                ApiErrorResponse.builder()
+                                                .code("INTERNAL_ERROR")
+                                                .message("Unexpected error occurred")
+                                                .build());
+        }
 
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiErrorResponse> handleUnexpected(
-            Exception ex,
-            HttpServletRequest request
-    ) {
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-                ApiErrorResponse.builder()
-                        .code("INTERNAL_ERROR")
-                        .message("Unexpected error occurred")
-                        .build()
-        );
-    }
-
-    @ExceptionHandler(OptimisticLockException.class)
-    public ResponseEntity<ApiErrorResponse> handleOptimisticLock(
-            OptimisticLockException ex,
-            HttpServletRequest request
-    ) {
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ApiErrorResponse.builder()
-                        .code("CONCURRENT_MODIFICATION")
-                        .message("Memory was updated by another request. Retry.")
-                        .build());
-    }
+        @ExceptionHandler(OptimisticLockException.class)
+        public ResponseEntity<ApiErrorResponse> handleOptimisticLock(
+                        OptimisticLockException ex,
+                        HttpServletRequest request) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                                .body(ApiErrorResponse.builder()
+                                                .code("CONCURRENT_MODIFICATION")
+                                                .message("Memory was updated by another request. Retry.")
+                                                .build());
+        }
 
 }

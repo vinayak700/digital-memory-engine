@@ -7,43 +7,74 @@ import com.memory.context.engine.domain.memory.api.dto.CreateMemoryRequest;
 import com.memory.context.engine.domain.memory.api.dto.MemoryResponse;
 import com.memory.context.engine.domain.memory.api.dto.UpdateMemoryRequest;
 import com.memory.context.engine.domain.memory.entity.Memory;
+import com.memory.context.engine.domain.memory.event.MemoryArchivedEvent;
+import com.memory.context.engine.domain.memory.event.MemoryCreatedEvent;
+import com.memory.context.engine.domain.memory.event.MemoryUpdatedEvent;
+import com.memory.context.engine.domain.memory.mapper.MemoryMapper;
 import com.memory.context.engine.domain.memory.repository.MemoryRepository;
-
+import com.memory.context.engine.infrastructure.cache.CacheNames;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.ZoneOffset;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 import static com.memory.context.engine.domain.common.util.MemoryUtils.setIfNotNull;
 
+/**
+ * Service layer for Memory operations.
+ * Handles business logic, authorization, caching, events, and transaction
+ * management.
+ */
+@Slf4j
 @Service
+@RequiredArgsConstructor
 public class MemoryService {
 
     private final MemoryRepository memoryRepository;
-
-    public MemoryService(MemoryRepository memoryRepository) {
-        this.memoryRepository = memoryRepository;
-    }
+    private final MemoryMapper memoryMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     // ==================================================
     // CREATE
     // ==================================================
 
     @Transactional
+    @CacheEvict(value = CacheNames.MEMORY_LISTS, allEntries = true)
     public MemoryResponse createMemory(CreateMemoryRequest request) {
-        Memory memory = new Memory();
-        memory.setTitle(request.getTitle());
-        memory.setContent(request.getContent());
-        memory.setUserId(currentUser());
-        memory.setImportanceScore(request.getImportanceScore());
-        memory.setContext(request.getContext());
-        memory.setArchived(false);
+        String userId = currentUser();
+        log.info("Creating memory for user: {}, title: {}", userId, request.getTitle());
+
+        Memory memory = Memory.builder()
+                .userId(userId)
+                .title(request.getTitle())
+                .content(request.getContent())
+                .importanceScore(request.getImportanceScore())
+                .context(request.getContext())
+                .archived(false)
+                .build();
 
         Memory saved = memoryRepository.save(memory);
-        return toResponse(saved);
+        log.debug("Memory created with id: {}", saved.getId());
+
+        // Publish domain event
+        eventPublisher.publishEvent(new MemoryCreatedEvent(
+                saved.getId(),
+                userId,
+                saved.getTitle(),
+                saved.getImportanceScore()));
+
+        return memoryMapper.toResponse(saved);
     }
 
     // ==================================================
@@ -51,16 +82,22 @@ public class MemoryService {
     // ==================================================
 
     @Transactional(readOnly = true)
+    @Cacheable(value = CacheNames.MEMORIES, key = "#id")
     public MemoryResponse getMemory(Long id) {
+        log.debug("Fetching memory id: {} for user: {}", id, currentUser());
         Memory memory = loadAndAuthorize(id);
-        return toResponse(memory);
+        return memoryMapper.toResponse(memory);
     }
 
     @Transactional(readOnly = true)
-    public Page<MemoryResponse> getActiveMemories(Pageable pageable) {
+    @Cacheable(value = CacheNames.MEMORY_LISTS, key = "'user:' + #root.target.currentUser() + ':page:' + #pageable.pageNumber")
+    public List<MemoryResponse> getActiveMemories(Pageable pageable) {
+        String userId = currentUser();
+        log.debug("Fetching active memories for user: {}, page: {}", userId, pageable.getPageNumber());
+
         return memoryRepository
-                .findByUserIdAndArchivedFalse(currentUser(), pageable)
-                .map(this::toResponse);
+                .findByUserIdAndArchivedFalse(userId, pageable)
+                .map(memoryMapper::toResponse).getContent();
     }
 
     // ==================================================
@@ -68,20 +105,47 @@ public class MemoryService {
     // ==================================================
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = CacheNames.MEMORIES, key = "#id"),
+            @CacheEvict(value = CacheNames.MEMORY_LISTS, allEntries = true)
+    })
     public MemoryResponse updateMemory(Long id, UpdateMemoryRequest request) {
+        String userId = currentUser();
+        log.info("Updating memory id: {} for user: {}", id, userId);
         Memory memory = loadAndAuthorize(id);
 
         if (memory.isArchived()) {
-            throw new InvalidMemoryStateException(
-                    "Archived memory cannot be modified");
+            log.warn("Attempted to update archived memory id: {}", id);
+            throw new InvalidMemoryStateException("Archived memory cannot be modified");
         }
 
-        setIfNotNull(request.getTitle(), memory::setTitle);
-        setIfNotNull(request.getContent(), memory::setContent);
-        setIfNotNull(request.getImportanceScore(), memory::setImportanceScore);
-        setIfNotNull(request.getContext(), memory::setContext);
+        // Track which fields are being updated
+        Set<String> updatedFields = new HashSet<>();
 
-        return toResponse(memory);
+        if (request.getTitle() != null) {
+            memory.setTitle(request.getTitle());
+            updatedFields.add("title");
+        }
+        if (request.getContent() != null) {
+            memory.setContent(request.getContent());
+            updatedFields.add("content");
+        }
+        if (request.getImportanceScore() != null) {
+            memory.setImportanceScore(request.getImportanceScore());
+            updatedFields.add("importanceScore");
+        }
+        if (request.getContext() != null) {
+            memory.setContext(request.getContext());
+            updatedFields.add("context");
+        }
+
+        Memory saved = memoryRepository.save(memory);
+        log.debug("Memory id: {} updated successfully", id);
+
+        // Publish domain event
+        eventPublisher.publishEvent(new MemoryUpdatedEvent(id, userId, updatedFields));
+
+        return memoryMapper.toResponse(saved);
     }
 
     // ==================================================
@@ -89,14 +153,26 @@ public class MemoryService {
     // ==================================================
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = CacheNames.MEMORIES, key = "#id"),
+            @CacheEvict(value = CacheNames.MEMORY_LISTS, allEntries = true)
+    })
     public void archiveMemory(Long id) {
+        String userId = currentUser();
+        log.info("Archiving memory id: {} for user: {}", id, userId);
         Memory memory = loadAndAuthorize(id);
 
         if (memory.isArchived()) {
+            log.debug("Memory id: {} already archived, skipping", id);
             return; // idempotent
         }
 
         memory.setArchived(true);
+        memoryRepository.save(memory);
+        log.debug("Memory id: {} archived successfully", id);
+
+        // Publish domain event
+        eventPublisher.publishEvent(new MemoryArchivedEvent(id, userId));
     }
 
     // ==================================================
@@ -105,31 +181,25 @@ public class MemoryService {
 
     private Memory loadAndAuthorize(Long memoryId) {
         Memory memory = memoryRepository.findById(memoryId)
-                .orElseThrow(() -> new ResourceNotFoundException("Memory not found"));
+                .orElseThrow(() -> {
+                    log.warn("Memory not found: {}", memoryId);
+                    return new ResourceNotFoundException("Memory not found");
+                });
 
-        if (!memory.getUserId().equals(currentUser())) {
-            throw new AccessDeniedException(
-                    "You do not have access to this memory");
+        String userId = currentUser();
+        if (!memory.getUserId().equals(userId)) {
+            log.warn("Access denied: user {} attempted to access memory {} owned by {}",
+                    userId, memoryId, memory.getUserId());
+            throw new AccessDeniedException("You do not have access to this memory");
         }
 
         return memory;
     }
 
-    private String currentUser() {
+    public String currentUser() {
         return SecurityContextHolder
                 .getContext()
                 .getAuthentication()
                 .getName();
-    }
-
-    private MemoryResponse toResponse(Memory memory) {
-        return new MemoryResponse(
-                memory.getId(),
-                memory.getTitle(),
-                memory.getContent(),
-                memory.getContext(),
-                memory.getImportanceScore(),
-                memory.isArchived(),
-                memory.getCreatedAt().atOffset(ZoneOffset.UTC));
     }
 }
