@@ -1,67 +1,95 @@
 package com.memory.context.engine.infrastructure.api.error;
 
-import com.memory.context.engine.domain.memory.exception.MemoryNotFoundException;
+import com.memory.context.engine.domain.common.exception.DomainException;
+import jakarta.persistence.OptimisticLockException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.time.Instant;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    // 1️⃣ Validation errors
+    // -------------------- VALIDATION --------------------
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiErrorResponse> handleValidation(
             MethodArgumentNotValidException ex,
             HttpServletRequest request
     ) {
-        String message = ex.getBindingResult()
+        Map<String, String> errors = ex.getBindingResult()
                 .getFieldErrors()
                 .stream()
-                .findFirst()
-                .map(err -> err.getField() + ": " + err.getDefaultMessage())
-                .orElse("Validation failed");
+                .collect(Collectors.toMap(
+                        FieldError::getField,
+                        FieldError::getDefaultMessage,
+                        (a, b) -> a
+                ));
 
-        return ResponseEntity.badRequest()
-                .body(ApiErrorResponse.builder()
+        return ResponseEntity.badRequest().body(
+                ApiErrorResponse.builder()
                         .code("VALIDATION_ERROR")
-                        .message(message)
-                        .timestamp(Instant.now())
-                        .path(request.getRequestURI())
-                        .build());
+                        .message("Validation failed")
+                        .details(errors)
+                        .build()
+        );
     }
 
-    // 2️⃣ Domain exception
-    @ExceptionHandler(MemoryNotFoundException.class)
-    public ResponseEntity<ApiErrorResponse> handleMemoryNotFound(
-            MemoryNotFoundException ex,
+
+    // -------------------- DOMAIN --------------------
+
+    @ExceptionHandler(DomainException.class)
+    public ResponseEntity<ApiErrorResponse> handleDomain(
+            DomainException ex,
             HttpServletRequest request
     ) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ApiErrorResponse.builder()
-                        .code("MEMORY_NOT_FOUND")
+        HttpStatus status = switch (ex.getCode()) {
+            case "RESOURCE_NOT_FOUND" -> HttpStatus.NOT_FOUND;
+            case "ACCESS_DENIED" -> HttpStatus.FORBIDDEN;
+            case "INVALID_MEMORY_STATE" -> HttpStatus.CONFLICT;
+            default -> HttpStatus.BAD_REQUEST;
+        };
+
+        return ResponseEntity.status(status).body(
+                ApiErrorResponse.builder()
+                        .code(ex.getCode())
                         .message(ex.getMessage())
-                        .timestamp(Instant.now())
-                        .path(request.getRequestURI())
-                        .build());
+                        .build()
+        );
     }
 
-    // 3️⃣ Catch-all fallback
+    // -------------------- FALLBACK --------------------
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiErrorResponse> handleUnexpected(
             Exception ex,
             HttpServletRequest request
     ) {
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiErrorResponse.builder()
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                ApiErrorResponse.builder()
                         .code("INTERNAL_ERROR")
-                        .message("Something went wrong")
-                        .timestamp(Instant.now())
-                        .path(request.getRequestURI())
+                        .message("Unexpected error occurred")
+                        .build()
+        );
+    }
+
+    @ExceptionHandler(OptimisticLockException.class)
+    public ResponseEntity<ApiErrorResponse> handleOptimisticLock(
+            OptimisticLockException ex,
+            HttpServletRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiErrorResponse.builder()
+                        .code("CONCURRENT_MODIFICATION")
+                        .message("Memory was updated by another request. Retry.")
                         .build());
     }
+
 }

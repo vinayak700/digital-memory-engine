@@ -18,9 +18,6 @@ public class CreateMemoryRequest {
     @NotBlank(message = "content is required")
     private String content;
 
-    @NotBlank(message = "userId is required")
-    private String userId;
-
     @Min(value = 1, message = "importanceScore must be >= 1")
     @Max(value = 10, message = "importanceScore must be <= 10")
     private int importanceScore;

@@ -10,13 +10,10 @@ import java.time.Instant;
 import java.util.Map;
 
 @Entity
-@Table(
-        name = "memories",
-        indexes = {
-                @Index(name = "idx_memory_user", columnList = "user_id"),
-                @Index(name = "idx_memory_created", columnList = "created_at")
-        }
-)
+@Table(name = "memories", indexes = {
+        @Index(name = "idx_memory_user", columnList = "user_id"),
+        @Index(name = "idx_memory_created", columnList = "created_at")
+})
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -51,6 +48,10 @@ public class Memory {
 
     @Column(name = "updated_at")
     private Instant updatedAt;
+
+    @Version
+    @Column(nullable = false)
+    private Long version;
 
     @PrePersist
     protected void onCreate() {
