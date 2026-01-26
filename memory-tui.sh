@@ -167,27 +167,34 @@ list_memories() {
         -H "X-User-Id: $USER_ID")
     
     # Check if empty
+    # Valid JSON check
     if [ "$response" == "[]" ]; then
         echo ""
         echo -e "${DIM}No memories found. Create one to get started!${NC}"
     else
         echo ""
-        # Parse and display memories
-        echo "$response" | grep -o '"id":[0-9]*,"title":"[^"]*"[^}]*"importanceScore":[0-9]*' | while read line; do
-            id=$(echo "$line" | grep -o '"id":[0-9]*' | cut -d: -f2)
-            title=$(echo "$line" | grep -o '"title":"[^"]*"' | cut -d: -f2 | tr -d '"')
-            score=$(echo "$line" | grep -o '"importanceScore":[0-9]*' | cut -d: -f2)
+        
+        # Parse and display memories using Python
+        echo "$response" | python3 -c "
+import sys, json
+
+try:
+    data = json.load(sys.stdin)
+    if isinstance(data, list):
+        for m in data:
+            mid = m.get('id')
+            title = m.get('title', 'Untitled')
+            score = m.get('importanceScore', 0)
             
-            # Stars based on importance
-            stars=""
-            for ((i=0; i<score; i++)); do
-                stars+="$STAR"
-            done
+            # Format output
+            stars = '★' * int(score)
+            print(f'  \033[0;36m[{mid}]\033[0m \033[1;37m{title}\033[0m')
+            print(f'       \033[1;33m{stars}\033[0m')
+            print('')
             
-            echo -e "  ${CYAN}[$id]${NC} ${WHITE}$title${NC}"
-            echo -e "       ${YELLOW}$stars${NC}"
-            echo ""
-        done
+except Exception as e:
+    pass
+"
     fi
     
     pause
@@ -357,6 +364,7 @@ search_memories() {
         -H "X-User-Id: $USER_ID" \
         -d "{\"query\":\"$query\",\"limit\":$limit}")
     
+    # Parse and display memories using Python
     if [ "$response" == "[]" ]; then
         echo ""
         echo -e "${DIM}No results found for: $query${NC}"
@@ -364,7 +372,30 @@ search_memories() {
         echo ""
         echo -e "${WHITE}Search Results:${NC}"
         divider
-        echo "$response"
+        
+        echo "$response" | python3 -c "
+import sys, json
+
+try:
+    data = json.load(sys.stdin)
+    if isinstance(data, list):
+        for m in data:
+            mid = m.get('id')
+            if mid is None: mid = m.get('memoryId')
+            
+            title = m.get('title', 'Untitled')
+            similarity = m.get('similarityScore')
+            
+            # Format output
+            print(f'  \033[0;36m[{mid}]\033[0m \033[1;37m{title}\033[0m')
+            
+            if similarity is not None:
+                sim_percent = int(similarity * 100)
+                print(f'       \033[1;33mMatch: {sim_percent}%\033[0m')
+            print('')
+except Exception as e:
+    pass
+"
     fi
     
     pause

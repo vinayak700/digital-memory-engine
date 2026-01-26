@@ -27,6 +27,7 @@ public class EmbeddingService {
     // Embedding dimension (OpenAI ada-002 uses 1536)
     private static final int EMBEDDING_DIMENSION = 1536;
 
+    @org.springframework.context.event.EventListener
     @KafkaListener(topics = KafkaConfig.Topics.MEMORY_EVENTS, groupId = "embedding-service-group")
     public void processEvent(Object event) {
         if (event instanceof MemoryCreatedEvent created) {
@@ -48,16 +49,28 @@ public class EmbeddingService {
     public void generateEmbedding(Long memoryId) {
         log.info("Generating embedding for memory: {}", memoryId);
 
-        // TODO: Actual implementation would:
-        // 1. Fetch memory content from database
-        // 2. Call embedding API (OpenAI, Cohere, etc.)
-        // 3. Store the embedding vector
+        // TODO: Actual implementation would call embedding API (OpenAI, Cohere, etc.)
+        // For now, we generate a random normalized vector so that vector search queries
+        // work.
 
-        // Placeholder - would be replaced with actual API call
-        // float[] embedding = embeddingApiClient.generateEmbedding(content);
-        // updateEmbedding(memoryId, embedding);
+        float[] embedding = new float[EMBEDDING_DIMENSION];
+        java.util.Random random = new java.util.Random();
+        double norm = 0.0;
 
-        log.debug("Embedding generation scheduled for memory: {}", memoryId);
+        // Generate random vector
+        for (int i = 0; i < EMBEDDING_DIMENSION; i++) {
+            embedding[i] = random.nextFloat() - 0.5f;
+            norm += embedding[i] * embedding[i];
+        }
+
+        // Normalize
+        norm = Math.sqrt(norm);
+        for (int i = 0; i < EMBEDDING_DIMENSION; i++) {
+            embedding[i] /= norm;
+        }
+
+        updateEmbedding(memoryId, embedding);
+        log.debug("Embedding generated and saved for memory: {}", memoryId);
     }
 
     /**

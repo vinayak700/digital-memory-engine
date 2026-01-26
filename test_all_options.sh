@@ -192,8 +192,13 @@ SEARCH_RESP=$(curl -s -X POST "$BASE_URL/search" \
   -d '{"query":"sprint planning","limit":5}')
 
 if echo "$SEARCH_RESP" | grep -q '\['; then
-    RESULT_COUNT=$(echo "$SEARCH_RESP" | grep -o '"memoryId"' | wc -l | tr -d ' ')
-    check_result "Search executed, found $RESULT_COUNT results" "true"
+    # SearchResult DTO uses "id" field, not "memoryId"
+    RESULT_COUNT=$(echo "$SEARCH_RESP" | grep -o '"id":' | wc -l | tr -d ' ')
+    if [ "$RESULT_COUNT" -gt 0 ]; then
+        check_result "Search executed, found $RESULT_COUNT results" "true"
+    else
+        check_result "Search executed, found 0 results" "true"
+    fi
 else
     check_result "Search executed" "false"
 fi

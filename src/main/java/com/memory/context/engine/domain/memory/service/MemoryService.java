@@ -20,19 +20,15 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
-import static com.memory.context.engine.domain.common.util.MemoryUtils.setIfNotNull;
 
 /**
  * Service layer for Memory operations.
@@ -54,7 +50,10 @@ public class MemoryService {
     // ==================================================
 
     @Transactional
-    @CacheEvict(value = CacheNames.MEMORY_LISTS, allEntries = true)
+    @Caching(evict = {
+            @CacheEvict(value = CacheNames.MEMORY_LISTS, allEntries = true),
+            @CacheEvict(value = "search-results", allEntries = true)
+    })
     public MemoryResponse createMemory(CreateMemoryRequest request) {
         String userId = currentUser();
         log.info("Creating memory for user: {}, title: {}", userId, request.getTitle());
@@ -117,7 +116,8 @@ public class MemoryService {
     @Transactional
     @Caching(evict = {
             @CacheEvict(value = CacheNames.MEMORIES, key = "#id"),
-            @CacheEvict(value = CacheNames.MEMORY_LISTS, allEntries = true)
+            @CacheEvict(value = CacheNames.MEMORY_LISTS, allEntries = true),
+            @CacheEvict(value = "search-results", allEntries = true)
     })
     public MemoryResponse updateMemory(Long id, UpdateMemoryRequest request) {
         String userId = currentUser();
@@ -165,7 +165,8 @@ public class MemoryService {
     @Transactional
     @Caching(evict = {
             @CacheEvict(value = CacheNames.MEMORIES, key = "#id"),
-            @CacheEvict(value = CacheNames.MEMORY_LISTS, allEntries = true)
+            @CacheEvict(value = CacheNames.MEMORY_LISTS, allEntries = true),
+            @CacheEvict(value = "search-results", allEntries = true)
     })
     public void archiveMemory(Long id) {
         String userId = currentUser();

@@ -5,7 +5,6 @@ import com.memory.context.engine.domain.memory.api.dto.MemoryResponse;
 import com.memory.context.engine.domain.memory.api.dto.UpdateMemoryRequest;
 import com.memory.context.engine.domain.memory.service.MemoryService;
 import jakarta.validation.Valid;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
@@ -27,22 +26,17 @@ public class MemoryController {
 
     @PostMapping
     public ResponseEntity<MemoryResponse> create(
-            @Valid @RequestBody CreateMemoryRequest request
-    ) {
+            @Valid @RequestBody CreateMemoryRequest request) {
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(memoryService.createMemory(request));
     }
 
     @GetMapping
-    public ResponseEntity<List<MemoryResponse>> getMemories(@PageableDefault(
-            size = 10,
-            sort = "createdAt",
-            direction = Sort.Direction.DESC) Pageable pageable) {
-        return ResponseEntity.ok(memoryService.getActiveMemories(pageable)
-        );
+    public ResponseEntity<List<MemoryResponse>> getMemories(
+            @PageableDefault(size = 10, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        return ResponseEntity.ok(memoryService.getActiveMemories(pageable));
     }
-
 
     @GetMapping("/{id}")
     public MemoryResponse get(@PathVariable Long id) {
@@ -52,8 +46,7 @@ public class MemoryController {
     @PatchMapping("/{id}")
     public MemoryResponse update(
             @PathVariable Long id,
-            @Valid @RequestBody UpdateMemoryRequest request
-    ) {
+            @Valid @RequestBody UpdateMemoryRequest request) {
         return memoryService.updateMemory(id, request);
     }
 

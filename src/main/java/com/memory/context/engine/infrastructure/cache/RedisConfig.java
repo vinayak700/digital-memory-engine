@@ -12,7 +12,6 @@ import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
@@ -58,9 +57,10 @@ public class RedisConfig {
                 template.setKeySerializer(new StringRedisSerializer());
                 template.setHashKeySerializer(new StringRedisSerializer());
 
-                // Use Generic serializer for robust handling of arbitrary objects (despite
-                // deprecation)
-                GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(objectMapper);
+                // Use Jackson2JsonRedisSerializer for robust handling of arbitrary objects
+                org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer<Object> serializer = new org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer<>(
+                                objectMapper, Object.class);
+
                 template.setValueSerializer(serializer);
                 template.setHashValueSerializer(serializer);
 
@@ -75,7 +75,8 @@ public class RedisConfig {
                         ObjectMapper objectMapper) {
                 // Use Generic serializer for robust handling of arbitrary objects (despite
                 // deprecation)
-                GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(objectMapper);
+                org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer<Object> serializer = new org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer<>(
+                                objectMapper, Object.class);
 
                 RedisCacheConfiguration defaultConfig = RedisCacheConfiguration.defaultCacheConfig()
                                 .serializeKeysWith(RedisSerializationContext.SerializationPair

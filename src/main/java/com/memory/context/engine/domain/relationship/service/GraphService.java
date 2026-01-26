@@ -38,9 +38,6 @@ public class GraphService {
     @CacheEvict(value = CACHE_GRAPH, allEntries = true)
     public MemoryRelationship createRelationship(CreateRelationshipRequest request) {
         String userId = getCurrentUser();
-        log.info("Creating relationship: {} -> {} ({})",
-                request.getSourceMemoryId(), request.getTargetMemoryId(), request.getType());
-
         Memory source = memoryRepository.findById(request.getSourceMemoryId())
                 .orElseThrow(() -> new ResourceNotFoundException("Source memory not found"));
         Memory target = memoryRepository.findById(request.getTargetMemoryId())

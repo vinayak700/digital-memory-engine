@@ -36,6 +36,7 @@ public class KafkaConfig {
     private String saslJaasConfig;
 
     @Bean
+    @SuppressWarnings("deprecation")
     public ProducerFactory<String, Object> producerFactory(ObjectMapper objectMapper) {
         Map<String, Object> configProps = new HashMap<>();
 

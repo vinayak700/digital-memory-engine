@@ -135,7 +135,7 @@ public class TextSimilarityService {
         String[] words = text.toLowerCase().split("\\W+");
         for (String word : words) {
             if (word.length() > 2) {
-                tf.merge(word, 1.0, Double::sum);
+                tf.merge(word, 1.0, (a, b) -> a + b);
             }
         }
         // Normalize

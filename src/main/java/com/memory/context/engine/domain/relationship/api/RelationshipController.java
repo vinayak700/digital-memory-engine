@@ -2,7 +2,6 @@ package com.memory.context.engine.domain.relationship.api;
 
 import com.memory.context.engine.domain.relationship.api.dto.CreateRelationshipRequest;
 import com.memory.context.engine.domain.relationship.api.dto.RelatedMemoryDto;
-import com.memory.context.engine.domain.relationship.entity.MemoryRelationship;
 import com.memory.context.engine.domain.relationship.service.GraphService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

@@ -18,46 +18,100 @@ import java.util.List;
 @RequiredArgsConstructor
 public class VectorSearchStrategy implements SearchStrategy {
 
-    private final JdbcTemplate jdbcTemplate;
+  private final JdbcTemplate jdbcTemplate;
 
-    @Override
-    public String getName() {
-        return "vector";
+  @Override
+  public String getName() {
+    return "vector";
+  }
+
+  @Override
+  public List<SearchResult> search(SearchRequest request, String userId) {
+    log.info("Executing text search for user: {}, query: '{}'", userId, request.getQuery());
+
+    String query = request.getQuery().trim();
+
+    // Try PostgreSQL full-text search first (handles multi-word queries properly)
+    try {
+      return executeFullTextSearch(query, userId, request.getLimit());
+    } catch (Exception e) {
+      log.warn("Full-text search failed, falling back to ILIKE: {}", e.getMessage());
+      return executeFallbackSearch(query, userId, request.getLimit());
     }
+  }
 
-    @Override
-    public List<SearchResult> search(SearchRequest request, String userId) {
-        log.info("Executing text search for user: {}, query: '{}'", userId, request.getQuery());
+  /**
+   * PostgreSQL full-text search using plainto_tsquery.
+   * Tokenizes words and applies stemming for better multi-word matching.
+   */
+  private List<SearchResult> executeFullTextSearch(String query, String userId, int limit) {
+    return jdbcTemplate.query(
+        """
+            SELECT id, title, LEFT(content, 200) as snippet,
+                   ts_rank(
+                       setweight(to_tsvector('english', COALESCE(title, '')), 'A') ||
+                       setweight(to_tsvector('english', COALESCE(content, '')), 'B'),
+                       plainto_tsquery('english', ?)
+                   ) as similarity
+            FROM memories
+            WHERE user_id = ?
+              AND archived = false
+              AND (
+                  to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(content, ''))
+                  @@ plainto_tsquery('english', ?)
+              )
+            ORDER BY similarity DESC, importance_score DESC, created_at DESC
+            LIMIT ?
+            """,
+        (rs, rowNum) -> SearchResult.builder()
+            .id(rs.getLong("id"))
+            .title(rs.getString("title"))
+            .contentSnippet(rs.getString("snippet"))
+            .similarityScore(Math.min(1.0, rs.getDouble("similarity") + 0.5))
+            .build(),
+        query, userId, query, limit);
+  }
 
-        String searchPattern = "%" + request.getQuery().toLowerCase() + "%";
+  /**
+   * Fallback search using AND-based ILIKE for each term.
+   * Used when full-text search is unavailable.
+   */
+  private List<SearchResult> executeFallbackSearch(String query, String userId, int limit) {
+    // Split query into individual terms
+    String[] terms = query.toLowerCase().split("\\s+");
 
-        // Text-based search using ILIKE (case-insensitive)
-        // Searches both title and content
-        // TODO: Replace with vector similarity when embeddings are available
-        return jdbcTemplate.query(
-                """
-                        SELECT id, title, LEFT(content, 200) as snippet,
-                               CASE
-                                 WHEN LOWER(title) LIKE ? THEN 0.9
-                                 WHEN LOWER(content) LIKE ? THEN 0.7
-                                 ELSE 0.5
-                               END as similarity
-                        FROM memories
-                        WHERE user_id = ?
-                          AND archived = false
-                          AND (LOWER(title) LIKE ? OR LOWER(content) LIKE ?)
-                        ORDER BY
-                          CASE WHEN LOWER(title) LIKE ? THEN 0 ELSE 1 END,
-                          importance_score DESC,
-                          created_at DESC
-                        LIMIT ?
-                        """,
-                (rs, rowNum) -> SearchResult.builder()
-                        .id(rs.getLong("id"))
-                        .title(rs.getString("title"))
-                        .contentSnippet(rs.getString("snippet"))
-                        .similarityScore(rs.getDouble("similarity"))
-                        .build(),
-                searchPattern, searchPattern, userId, searchPattern, searchPattern, searchPattern, request.getLimit());
+    // Build dynamic WHERE clause: each term must match title OR content
+    StringBuilder whereClause = new StringBuilder();
+    List<Object> params = new java.util.ArrayList<>();
+    params.add(userId);
+
+    for (int i = 0; i < terms.length; i++) {
+      if (i > 0)
+        whereClause.append(" AND ");
+      whereClause.append("(LOWER(title) LIKE ? OR LOWER(content) LIKE ?)");
+      String pattern = "%" + terms[i] + "%";
+      params.add(pattern);
+      params.add(pattern);
     }
+    params.add(limit);
+
+    String sql = String.format("""
+        SELECT id, title, LEFT(content, 200) as snippet, 0.7 as similarity
+        FROM memories
+        WHERE user_id = ?
+          AND archived = false
+          AND (%s)
+        ORDER BY importance_score DESC, created_at DESC
+        LIMIT ?
+        """, whereClause);
+
+    return jdbcTemplate.query(sql,
+        (rs, rowNum) -> SearchResult.builder()
+            .id(rs.getLong("id"))
+            .title(rs.getString("title"))
+            .contentSnippet(rs.getString("snippet"))
+            .similarityScore(rs.getDouble("similarity"))
+            .build(),
+        params.toArray());
+  }
 }

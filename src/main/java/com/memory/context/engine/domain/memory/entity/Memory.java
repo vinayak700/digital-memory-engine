@@ -1,6 +1,5 @@
 package com.memory.context.engine.domain.memory.entity;
 
-import com.memory.context.engine.infrastructure.jpa.JsonMapConverter;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;

@@ -10,7 +10,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -29,6 +32,7 @@ public class AnswerSynthesisEngine {
     private final TextSimilarityService similarityService;
     private final KeywordExtractionService keywordService;
     private final JdbcTemplate jdbcTemplate;
+    private final GeminiService geminiService;
 
     /**
      * Main entry point: Ask a question and get an intelligent answer.
@@ -37,19 +41,16 @@ public class AnswerSynthesisEngine {
         String userId = getCurrentUser();
         log.info("Processing question for user {}: '{}'", userId, question);
 
-        // 1. Parse the question to understand intent
-        QuestionAnalysis analysis = analyzeQuestion(question);
-
-        // 2. Find relevant memories using full-text search
+        // 1. Find relevant memories using full-text search
         List<ScoredMemory> relevantMemories = findRelevantMemories(question, userId, 10);
 
-        // 3. Expand context via relationships
+        // 2. Expand context via relationships
         List<ScoredMemory> expandedContext = expandContextViaRelationships(relevantMemories, userId);
 
-        // 4. Synthesize answer from memories
-        String synthesizedAnswer = synthesizeAnswer(question, analysis, relevantMemories, expandedContext);
+        // 3. Synthesize answer from memories
+        String synthesizedAnswer = synthesizeAnswer(question, relevantMemories, expandedContext);
 
-        // 5. Build response with sources
+        // 4. Build response with sources
         return AnswerResponse.builder()
                 .question(question)
                 .answer(synthesizedAnswer)
@@ -64,70 +65,53 @@ public class AnswerSynthesisEngine {
     }
 
     /**
-     * Analyze the question to understand intent and extract key terms.
-     */
-    private QuestionAnalysis analyzeQuestion(String question) {
-        QuestionAnalysis analysis = new QuestionAnalysis();
-
-        String lowerQ = question.toLowerCase();
-
-        // Detect question type
-        if (lowerQ.startsWith("what")) {
-            analysis.type = QuestionType.WHAT;
-        } else if (lowerQ.startsWith("why")) {
-            analysis.type = QuestionType.WHY;
-        } else if (lowerQ.startsWith("how")) {
-            analysis.type = QuestionType.HOW;
-        } else if (lowerQ.startsWith("when")) {
-            analysis.type = QuestionType.WHEN;
-        } else if (lowerQ.startsWith("who")) {
-            analysis.type = QuestionType.WHO;
-        } else if (lowerQ.contains("list") || lowerQ.contains("show") || lowerQ.contains("all")) {
-            analysis.type = QuestionType.LIST;
-        } else {
-            analysis.type = QuestionType.GENERAL;
-        }
-
-        // Detect temporal references
-        if (lowerQ.contains("today") || lowerQ.contains("yesterday") ||
-                lowerQ.contains("last week") || lowerQ.contains("recent")) {
-            analysis.hasTemporal = true;
-        }
-
-        // Extract keywords
-        analysis.keywords = keywordService.extractKeywords(question, 5);
-
-        return analysis;
-    }
-
-    /**
      * Find memories relevant to the question using PostgreSQL full-text search.
      */
     private List<ScoredMemory> findRelevantMemories(String question, String userId, int limit) {
         // Extract search terms
+        // Extract search terms and ensure valid tsquery syntax
         List<String> keywords = keywordService.extractKeywords(question, 5);
-        String searchQuery = String.join(" | ", keywords); // OR search
 
-        if (searchQuery.isBlank()) {
-            searchQuery = question.replaceAll("[^a-zA-Z0-9\\s]", "").trim();
+        // Split any multi-word keywords and the original question to ensure we catch
+        // all terms
+        Set<String> searchTerms = new HashSet<>();
+        searchTerms.addAll(keywords);
+        // Also add individual words from the question to ensure broad recall
+        String[] rawWords = question.replaceAll("[^a-zA-Z0-9\\s]", "").toLowerCase().split("\\s+");
+        for (String word : rawWords) {
+            if (word.length() > 2) { // Filter out very short words
+                searchTerms.add(word);
+            }
         }
 
-        log.debug("Searching with query: {}", searchQuery);
+        // Construct a valid to_tsquery string: "term1 | term2 | term3"
+        String searchQuery = searchTerms.stream()
+                .map(term -> term.trim().replaceAll("\\s+", " & ")) // Treat phrases as AND
+                .filter(term -> !term.isBlank())
+                .collect(Collectors.joining(" | "));
+
+        if (searchQuery.isBlank()) {
+            // Fallback for empty query
+            searchQuery = "memory";
+        }
+
+        log.debug("Searching with formatted tsquery: {}", searchQuery);
 
         // Use PostgreSQL full-text search with ranking
+        // We use to_tsquery to support the OR (|) operator constructed from keywords
         String sql = """
                 SELECT m.id, m.title, m.content, m.importance_score, m.context, m.created_at,
                        ts_rank(
                            setweight(to_tsvector('english', COALESCE(m.title, '')), 'A') ||
                            setweight(to_tsvector('english', COALESCE(m.content, '')), 'B'),
-                           plainto_tsquery('english', ?)
+                           to_tsquery('english', ?)
                        ) as rank
                 FROM memories m
                 WHERE m.user_id = ?
                   AND m.archived = false
                   AND (
                       to_tsvector('english', COALESCE(m.title, '') || ' ' || COALESCE(m.content, ''))
-                      @@ plainto_tsquery('english', ?)
+                      @@ to_tsquery('english', ?)
                       OR LOWER(m.title) LIKE ?
                       OR LOWER(m.content) LIKE ?
                   )
@@ -135,7 +119,16 @@ public class AnswerSynthesisEngine {
                 LIMIT ?
                 """;
 
-        String likePattern = "%" + question.toLowerCase().split("\\s+")[0] + "%";
+        // For LIKE fallback, try to find a meaningful keyword if possible, otherwise
+        // first word
+        String likePattern = "%" + question.toLowerCase() + "%";
+        if (!keywords.isEmpty()) {
+            // Use the longest keyword as the LIKE pattern for better specificity
+            String bestKeyword = keywords.stream()
+                    .max((s1, s2) -> s1.length() - s2.length())
+                    .orElse(question.split("\\s+")[0]);
+            likePattern = "%" + bestKeyword.toLowerCase() + "%";
+        }
 
         try {
             return jdbcTemplate.query(sql, (rs, rowNum) -> {
@@ -144,7 +137,10 @@ public class AnswerSynthesisEngine {
                 memory.setTitle(rs.getString("title"));
                 memory.setContent(rs.getString("content"));
                 memory.setImportanceScore(rs.getInt("importance_score"));
-                memory.setCreatedAt(rs.getTimestamp("created_at").toInstant());
+                var timestamp = rs.getTimestamp("created_at");
+                if (timestamp != null) {
+                    memory.setCreatedAt(timestamp.toInstant());
+                }
 
                 double rank = rs.getDouble("rank");
                 double similarity = similarityService.cosineSimilarity(question,
@@ -220,64 +216,42 @@ public class AnswerSynthesisEngine {
     }
 
     /**
-     * Synthesize a coherent answer from the relevant memories.
+     * Synthesize a coherent answer from the relevant memories using Gemini LLM.
      */
-    private String synthesizeAnswer(String question, QuestionAnalysis analysis,
+    private String synthesizeAnswer(String question,
             List<ScoredMemory> relevantMemories,
             List<ScoredMemory> expandedContext) {
 
         if (relevantMemories.isEmpty()) {
-            return "I don't have any memories related to this question. " +
-                    "Try creating some memories first with relevant information.";
+            return "I don't have enough information in your memories to answer that question.";
         }
 
-        StringBuilder answer = new StringBuilder();
+        // Collect memory contexts
+        List<String> memoryContexts = new ArrayList<>();
 
-        // Opening based on question type
-        switch (analysis.type) {
-            case WHAT -> answer.append("Based on your memories, here's what I found:\n\n");
-            case WHY -> answer.append("Looking at your memories for the reasons:\n\n");
-            case HOW -> answer.append("Here's how, according to your memories:\n\n");
-            case WHEN -> answer.append("From your memories, regarding timing:\n\n");
-            case LIST -> answer.append("Here are the relevant items from your memories:\n\n");
-            default -> answer.append("From your memories:\n\n");
-        }
-
-        // Extract and present key information from each memory
-        int count = 0;
+        // Add direct relevant memories
         for (ScoredMemory scored : relevantMemories) {
-            if (count >= 5)
-                break; // Limit to top 5
-
             Memory m = scored.memory;
-            String relevantSentence = similarityService.findMostRelevantSentence(m.getContent(), question);
-
-            answer.append("• ").append(relevantSentence).append("\n");
-            answer.append("  ").append("(from: \"").append(m.getTitle()).append("\"");
-            answer.append(", importance: ").append(m.getImportanceScore()).append("/10)\n\n");
-
-            count++;
+            memoryContexts.add(String.format("Title: %s\nContent: %s\n(Created: %s)",
+                    m.getTitle(), m.getContent(), m.getCreatedAt()));
         }
 
-        // Add related context if available
-        if (!expandedContext.isEmpty()) {
-            answer.append("---\n📎 Related memories:\n");
-            for (ScoredMemory related : expandedContext.stream().limit(3).toList()) {
-                answer.append("  → ").append(related.memory.getTitle()).append("\n");
-            }
+        // Add expanded context (relationships)
+        for (ScoredMemory scored : expandedContext) {
+            Memory m = scored.memory;
+            memoryContexts.add(String.format("[Related] Title: %s\nContent: %s",
+                    m.getTitle(), m.getContent()));
         }
 
-        // Add confidence note
-        double confidence = calculateConfidence(relevantMemories);
-        if (confidence < 0.3) {
-            answer.append("\n⚠️ Note: Low confidence match. Consider adding more relevant memories.");
-        }
+        log.info("Sending {} memory contexts to Gemini for synthesis", memoryContexts.size());
 
-        return answer.toString();
+        // Use proper LLM for synthesis
+        return geminiService.generateAnswer(question, memoryContexts);
     }
 
     /**
      * Calculate overall confidence in the answer.
+     * With LLM, this is less deterministic, but we can base it on retrieval scores.
      */
     private double calculateConfidence(List<ScoredMemory> memories) {
         if (memories.isEmpty())
@@ -288,10 +262,9 @@ public class AnswerSynthesisEngine {
                 .average()
                 .orElse(0.0);
 
-        // Boost confidence if we have multiple matching memories
-        double countBonus = Math.min(0.2, memories.size() * 0.05);
-
-        return Math.min(1.0, avgScore + countBonus);
+        // Boost confidence if we have multiple high-quality matches
+        // For LLMs, having good context is key.
+        return Math.min(1.0, avgScore);
     }
 
     private String getCurrentUser() {
@@ -301,15 +274,5 @@ public class AnswerSynthesisEngine {
     // Inner classes
 
     public record ScoredMemory(Memory memory, double score) {
-    }
-
-    public enum QuestionType {
-        WHAT, WHY, HOW, WHEN, WHO, LIST, GENERAL
-    }
-
-    private static class QuestionAnalysis {
-        QuestionType type = QuestionType.GENERAL;
-        List<String> keywords = new ArrayList<>();
-        boolean hasTemporal = false;
     }
 }

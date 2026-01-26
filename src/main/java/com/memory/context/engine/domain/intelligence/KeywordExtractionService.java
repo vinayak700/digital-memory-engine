@@ -63,8 +63,8 @@ public class KeywordExtractionService {
         for (List<String> phrase : phrases) {
             int degree = phrase.size() - 1;
             for (String word : phrase) {
-                wordFrequency.merge(word, 1, Integer::sum);
-                wordDegree.merge(word, degree, Integer::sum);
+                wordFrequency.merge(word, 1, (a, b) -> a + b);
+                wordDegree.merge(word, degree, (a, b) -> a + b);
             }
         }
 
@@ -81,7 +81,7 @@ public class KeywordExtractionService {
             double score = phrase.stream()
                     .mapToDouble(w -> wordScore.getOrDefault(w, 0.0))
                     .sum();
-            phraseScores.merge(phraseStr, score, Math::max);
+            phraseScores.merge(phraseStr, score, (a, b) -> Math.max(a, b));
         }
 
         // 5. Return top N keywords
