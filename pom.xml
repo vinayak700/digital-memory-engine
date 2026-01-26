@@ -98,6 +98,11 @@
             <artifactId>spring-shell-starter</artifactId>
             <version>3.4.1</version>
         </dependency>
+        <!-- Caffeine for high-performance in-memory caching -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
     </dependencies>
 
 	<build>

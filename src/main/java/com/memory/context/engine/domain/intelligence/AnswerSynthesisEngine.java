@@ -68,9 +68,18 @@ public class AnswerSynthesisEngine {
      * Find memories relevant to the question using PostgreSQL full-text search.
      */
     private List<ScoredMemory> findRelevantMemories(String question, String userId, int limit) {
-        // Extract search terms
-        // Extract search terms and ensure valid tsquery syntax
-        List<String> keywords = keywordService.extractKeywords(question, 5);
+        log.info("Generating intelligent search terms for: '{}'", question);
+
+        // 1. Try to get intelligent search terms from Gemini
+        List<String> keywords = geminiService.extractSearchTerms(question);
+
+        // 2. Fallback to basic keyword extraction if Gemini fails or returns nothing
+        if (keywords.isEmpty()) {
+            log.debug("Gemini returned no search terms, falling back to RAKE.");
+            keywords = keywordService.extractKeywords(question, 5);
+        } else {
+            log.info("Gemini generated search terms: {}", keywords);
+        }
 
         // Split any multi-word keywords and the original question to ensure we catch
         // all terms

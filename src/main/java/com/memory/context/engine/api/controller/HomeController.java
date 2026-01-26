@@ -57,6 +57,9 @@ public class HomeController {
                             <li><code>DELETE /api/v1/memories/{id}</code> - Archive memory</li>
                             <li><code>POST /api/v1/search</code> - Semantic search</li>
                             <li><code>POST /api/v1/relationships</code> - Create relationship</li>
+                            <li><code>GET /api/v1/relationships/memory/{id}</code> - View relationships</li>
+                            <li><code>POST /api/v1/ask</code> - Ask intelligent engine</li>
+                            <li><code>GET /api/v1/ask?q=</code> - Quick question</li>
                         </ul>
                     </div>
                 </body>

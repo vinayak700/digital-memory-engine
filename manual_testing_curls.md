@@ -23,15 +23,11 @@ curl -X GET http://localhost:8082/
 ```bash
 curl -X POST http://localhost:8082/api/v1/memories \
   -H "Content-Type: application/json" \
+  -H "X-User-Id: admin" \
   -d '{
     "title": "Learning Spring Boot",
-    "content": "Spring Boot makes it easy to create stand-alone, production-grade Spring based Applications. It provides opinionated 'starter' dependencies to simplify your build configuration.",
-    "importanceScore": 8,
-    "context": {
-      "category": "technical",
-      "tags": ["java", "spring-boot", "backend"],
-      "source": "documentation"
-    }
+    "content": "Spring Boot makes it easy to create stand-alone, production-grade Spring based Applications. It provides opinionated starter dependencies to simplify your build configuration.",
+    "importanceScore": 8
   }' | json_pp
 ```
 
@@ -39,40 +35,41 @@ curl -X POST http://localhost:8082/api/v1/memories \
 ```bash
 curl -X POST http://localhost:8082/api/v1/memories \
   -H "Content-Type: application/json" \
+  -H "X-User-Id: admin" \
   -d '{
     "title": "Java Streams API",
-    "content": "The Stream API is used to process collections of objects. A stream is a sequence of objects that supports various methods which can be pipelined to produce the desired result.",
-    "importanceScore": 6,
-    "context": {
-      "category": "technical",
-      "tags": ["java", "streams", "functional-programming"]
-    }
+    "content": "The Stream API is used to process collections of objects. A stream is a sequence of objects that supports various methods.",
+    "importanceScore": 6
   }' | json_pp
 ```
 
 **List Memories**
 ```bash
-curl -X GET "http://localhost:8082/api/v1/memories?page=0&size=10&sort=createdAt,desc" | json_pp
+curl -X GET "http://localhost:8082/api/v1/memories?page=0&size=10" \
+  -H "X-User-Id: admin" | json_pp
 ```
 
-**Get Single Memory** (Replace `1` with actual ID from creation response)
+**Get Single Memory** (Replace `1` with actual ID)
 ```bash
-curl -X GET http://localhost:8082/api/v1/memories/1 | json_pp
+curl -X GET http://localhost:8082/api/v1/memories/1 \
+  -H "X-User-Id: admin" | json_pp
 ```
 
 **Update Memory**
 ```bash
 curl -X PATCH http://localhost:8082/api/v1/memories/1 \
   -H "Content-Type: application/json" \
+  -H "X-User-Id: admin" \
   -d '{
-    "content": "Updated content: Spring Boot is awesome and very popular for microservices!",
+    "content": "Updated: Spring Boot is awesome for microservices!",
     "importanceScore": 9
   }' | json_pp
 ```
 
 **Delete (Archive) Memory**
 ```bash
-curl -X DELETE http://localhost:8082/api/v1/memories/1
+curl -X DELETE http://localhost:8082/api/v1/memories/1 \
+  -H "X-User-Id: admin"
 ```
 
 ---
