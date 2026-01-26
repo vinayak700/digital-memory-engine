@@ -14,6 +14,7 @@ import java.math.BigDecimal;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@lombok.Builder
 public class CreateRelationshipRequest {
 
     @NotNull
@@ -25,5 +26,6 @@ public class CreateRelationshipRequest {
     @NotNull
     private RelationshipType type;
 
+    @lombok.Builder.Default
     private BigDecimal strength = BigDecimal.ONE;
 }

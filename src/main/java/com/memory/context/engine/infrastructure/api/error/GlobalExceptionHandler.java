@@ -65,6 +65,9 @@ public class GlobalExceptionHandler {
         public ResponseEntity<ApiErrorResponse> handleUnexpected(
                         Exception ex,
                         HttpServletRequest request) {
+                // Log the actual error for debugging
+                org.slf4j.LoggerFactory.getLogger(GlobalExceptionHandler.class)
+                                .error("Unexpected error on {}: {}", request.getRequestURI(), ex.getMessage(), ex);
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
                                 ApiErrorResponse.builder()
                                                 .code("INTERNAL_ERROR")

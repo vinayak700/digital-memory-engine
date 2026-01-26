@@ -13,6 +13,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@lombok.Builder
 public class SearchRequest {
 
     @NotBlank(message = "Query is required")
@@ -20,7 +21,9 @@ public class SearchRequest {
 
     @Min(1)
     @Max(50)
+    @lombok.Builder.Default
     private int limit = 10;
 
+    @lombok.Builder.Default
     private Double similarityThreshold = 0.7;
 }

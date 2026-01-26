@@ -3,6 +3,7 @@ package com.memory.context.engine.domain.memory.service;
 import com.memory.context.engine.domain.common.exception.AccessDeniedException;
 import com.memory.context.engine.domain.common.exception.InvalidMemoryStateException;
 import com.memory.context.engine.domain.common.exception.ResourceNotFoundException;
+import com.memory.context.engine.domain.intelligence.KeywordExtractionService;
 import com.memory.context.engine.domain.memory.api.dto.CreateMemoryRequest;
 import com.memory.context.engine.domain.memory.api.dto.MemoryResponse;
 import com.memory.context.engine.domain.memory.api.dto.UpdateMemoryRequest;
@@ -25,8 +26,10 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static com.memory.context.engine.domain.common.util.MemoryUtils.setIfNotNull;
@@ -44,6 +47,7 @@ public class MemoryService {
     private final MemoryRepository memoryRepository;
     private final MemoryMapper memoryMapper;
     private final ApplicationEventPublisher eventPublisher;
+    private final KeywordExtractionService keywordExtractionService;
 
     // ==================================================
     // CREATE
@@ -55,17 +59,27 @@ public class MemoryService {
         String userId = currentUser();
         log.info("Creating memory for user: {}, title: {}", userId, request.getTitle());
 
+        // Auto-extract context metadata if not provided
+        Map<String, Object> context = request.getContext();
+        if (context == null || context.isEmpty()) {
+            log.debug("Auto-extracting context metadata for memory");
+            context = keywordExtractionService.extractContextMetadata(
+                    request.getTitle(),
+                    request.getContent());
+        }
+
         Memory memory = Memory.builder()
                 .userId(userId)
                 .title(request.getTitle())
                 .content(request.getContent())
                 .importanceScore(request.getImportanceScore())
-                .context(request.getContext())
+                .context(context)
                 .archived(false)
                 .build();
 
         Memory saved = memoryRepository.save(memory);
-        log.debug("Memory created with id: {}", saved.getId());
+        log.debug("Memory created with id: {}, keywords: {}", saved.getId(),
+                context.get("keywords"));
 
         // Publish domain event
         eventPublisher.publishEvent(new MemoryCreatedEvent(
@@ -99,10 +113,6 @@ public class MemoryService {
                 .findByUserIdAndArchivedFalse(userId, pageable)
                 .map(memoryMapper::toResponse).getContent();
     }
-
-    // ==================================================
-    // UPDATE
-    // ==================================================
 
     @Transactional
     @Caching(evict = {
@@ -174,10 +184,6 @@ public class MemoryService {
         // Publish domain event
         eventPublisher.publishEvent(new MemoryArchivedEvent(id, userId));
     }
-
-    // ==================================================
-    // INTERNALS
-    // ==================================================
 
     private Memory loadAndAuthorize(Long memoryId) {
         Memory memory = memoryRepository.findById(memoryId)

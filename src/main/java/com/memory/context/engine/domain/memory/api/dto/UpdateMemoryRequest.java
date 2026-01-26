@@ -16,6 +16,7 @@ import java.util.Map;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@lombok.Builder
 public class UpdateMemoryRequest {
 
         @Size(min = 1, message = "Title cannot be empty if provided")

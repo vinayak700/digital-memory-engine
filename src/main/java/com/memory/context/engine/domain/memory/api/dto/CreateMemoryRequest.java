@@ -10,6 +10,7 @@ import java.util.Map;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@lombok.Builder
 public class CreateMemoryRequest {
 
     @NotBlank(message = "title is required")

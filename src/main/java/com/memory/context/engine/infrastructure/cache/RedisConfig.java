@@ -40,10 +40,16 @@ public class RedisConfig {
                 ObjectMapper mapper = new ObjectMapper();
                 mapper.registerModule(new JavaTimeModule());
                 mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+                // Default typing enabled to support polymorphic deserialization if needed
+                mapper.activateDefaultTyping(
+                                mapper.getPolymorphicTypeValidator(),
+                                ObjectMapper.DefaultTyping.NON_FINAL,
+                                com.fasterxml.jackson.annotation.JsonTypeInfo.As.PROPERTY);
                 return mapper;
         }
 
         @Bean
+        @SuppressWarnings("deprecation")
         public RedisTemplate<String, Object> redisTemplate(
                         RedisConnectionFactory connectionFactory,
                         ObjectMapper objectMapper) {
@@ -51,16 +57,24 @@ public class RedisConfig {
                 template.setConnectionFactory(connectionFactory);
                 template.setKeySerializer(new StringRedisSerializer());
                 template.setHashKeySerializer(new StringRedisSerializer());
-                template.setValueSerializer(new GenericJackson2JsonRedisSerializer(objectMapper));
-                template.setHashValueSerializer(new GenericJackson2JsonRedisSerializer(objectMapper));
+
+                // Use Generic serializer for robust handling of arbitrary objects (despite
+                // deprecation)
+                GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(objectMapper);
+                template.setValueSerializer(serializer);
+                template.setHashValueSerializer(serializer);
+
                 template.afterPropertiesSet();
                 return template;
         }
 
         @Bean
+        @SuppressWarnings("deprecation")
         public CacheManager cacheManager(
                         RedisConnectionFactory connectionFactory,
                         ObjectMapper objectMapper) {
+                // Use Generic serializer for robust handling of arbitrary objects (despite
+                // deprecation)
                 GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(objectMapper);
 
                 RedisCacheConfiguration defaultConfig = RedisCacheConfiguration.defaultCacheConfig()

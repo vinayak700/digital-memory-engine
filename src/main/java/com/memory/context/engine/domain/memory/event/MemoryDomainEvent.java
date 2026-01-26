@@ -9,12 +9,14 @@ import java.time.Instant;
  * Provides common fields for event tracking and auditing.
  */
 @Getter
+@lombok.NoArgsConstructor
+@lombok.AllArgsConstructor
 public abstract class MemoryDomainEvent {
 
-    private final Long memoryId;
-    private final String userId;
-    private final Instant occurredAt;
-    private final String eventType;
+    private Long memoryId;
+    private String userId;
+    private Instant occurredAt;
+    private String eventType;
 
     protected MemoryDomainEvent(Long memoryId, String userId, String eventType) {
         this.memoryId = memoryId;

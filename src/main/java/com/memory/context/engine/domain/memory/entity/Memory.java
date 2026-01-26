@@ -32,7 +32,6 @@ public class Memory {
 
     @Column(columnDefinition = "TEXT", nullable = false)
     private String content;
-
     @Column(columnDefinition = "jsonb")
     @JdbcTypeCode(SqlTypes.JSON)
     private Map<String, Object> context;
@@ -41,6 +40,7 @@ public class Memory {
     private int importanceScore;
 
     @Column(nullable = false)
+    @Builder.Default
     private boolean archived = false;
 
     @Column(name = "created_at", updatable = false)
