@@ -12,22 +12,32 @@ import java.util.List;
  */
 public interface MemoryRelationshipRepository extends JpaRepository<MemoryRelationship, Long> {
 
-    List<MemoryRelationship> findBySourceMemoryId(Long sourceMemoryId);
+        List<MemoryRelationship> findBySourceMemoryId(Long sourceMemoryId);
 
-    List<MemoryRelationship> findByTargetMemoryId(Long targetMemoryId);
+        List<MemoryRelationship> findByTargetMemoryId(Long targetMemoryId);
 
-    List<MemoryRelationship> findBySourceMemoryIdAndRelationshipType(
-            Long sourceMemoryId,
-            RelationshipType type);
+        List<MemoryRelationship> findBySourceMemoryIdAndRelationshipType(
+                        Long sourceMemoryId,
+                        RelationshipType type);
 
-    @Query("""
-            SELECT r FROM MemoryRelationship r
-            WHERE r.sourceMemory.id = :memoryId OR r.targetMemory.id = :memoryId
-            """)
-    List<MemoryRelationship> findAllConnected(Long memoryId);
+        @Query("""
+                        SELECT r FROM MemoryRelationship r
+                        WHERE (r.sourceMemory.id = :memoryId OR r.targetMemory.id = :memoryId)
+                        AND r.sourceMemory.archived = false
+                        AND r.targetMemory.archived = false
+                        """)
+        List<MemoryRelationship> findAllConnected(Long memoryId);
 
-    boolean existsBySourceMemoryIdAndTargetMemoryIdAndRelationshipType(
-            Long sourceId,
-            Long targetId,
-            RelationshipType type);
+        @Query("""
+                        SELECT r FROM MemoryRelationship r
+                        WHERE (r.sourceMemory.id IN :memoryIds OR r.targetMemory.id IN :memoryIds)
+                        AND r.sourceMemory.archived = false
+                        AND r.targetMemory.archived = false
+                        """)
+        List<MemoryRelationship> findAllByMemoryIds(java.util.Collection<Long> memoryIds);
+
+        boolean existsBySourceMemoryIdAndTargetMemoryIdAndRelationshipType(
+                        Long sourceId,
+                        Long targetId,
+                        RelationshipType type);
 }

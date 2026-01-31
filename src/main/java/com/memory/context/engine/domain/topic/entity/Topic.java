@@ -1,5 +1,6 @@
 package com.memory.context.engine.domain.topic.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -30,6 +31,12 @@ public class Topic {
 
     @Column(columnDefinition = "TEXT")
     private String description;
+
+    @ManyToMany(mappedBy = "topics", fetch = FetchType.LAZY)
+    @ToString.Exclude
+    @Builder.Default
+    @JsonIgnore
+    private java.util.Set<com.memory.context.engine.domain.memory.entity.Memory> memories = new java.util.HashSet<>();
 
     @Column(name = "created_at")
     private Instant createdAt;

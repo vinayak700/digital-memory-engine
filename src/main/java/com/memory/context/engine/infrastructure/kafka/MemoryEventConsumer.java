@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class MemoryEventConsumer {
 
-    @KafkaListener(topics = KafkaConfig.Topics.MEMORY_EVENTS, groupId = "${spring.kafka.consumer.group-id:memory-engine-group}")
+    @KafkaListener(topics = KafkaConfig.Topics.MEMORY_EVENTS, groupId = "${spring.kafka.consumer.group-id:memory-engine-group}", containerFactory = "kafkaListenerContainerFactory")
     public void consumeEvent(MemoryDomainEvent event) {
         log.info("Consuming event: type={}, memoryId={}, userId={}",
                 event.getEventType(),

@@ -117,7 +117,8 @@ public class MemoryService {
     @Caching(evict = {
             @CacheEvict(value = CacheNames.MEMORIES, key = "#id"),
             @CacheEvict(value = CacheNames.MEMORY_LISTS, allEntries = true),
-            @CacheEvict(value = "search-results", allEntries = true)
+            @CacheEvict(value = CacheNames.SEARCH, allEntries = true),
+            @CacheEvict(value = CacheNames.GRAPH, allEntries = true)
     })
     public MemoryResponse updateMemory(Long id, UpdateMemoryRequest request) {
         String userId = currentUser();
@@ -166,7 +167,8 @@ public class MemoryService {
     @Caching(evict = {
             @CacheEvict(value = CacheNames.MEMORIES, key = "#id"),
             @CacheEvict(value = CacheNames.MEMORY_LISTS, allEntries = true),
-            @CacheEvict(value = "search-results", allEntries = true)
+            @CacheEvict(value = CacheNames.SEARCH, allEntries = true),
+            @CacheEvict(value = CacheNames.GRAPH, allEntries = true)
     })
     public void archiveMemory(Long id) {
         String userId = currentUser();

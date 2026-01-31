@@ -57,9 +57,10 @@ public class RedisConfig {
                 template.setKeySerializer(new StringRedisSerializer());
                 template.setHashKeySerializer(new StringRedisSerializer());
 
-                // Use Jackson2JsonRedisSerializer for robust handling of arbitrary objects
-                org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer<Object> serializer = new org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer<>(
-                                objectMapper, Object.class);
+                // Use GenericJackson2JsonRedisSerializer for robust handling of arbitrary
+                // objects (non-deprecated)
+                org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer serializer = new org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer(
+                                objectMapper);
 
                 template.setValueSerializer(serializer);
                 template.setHashValueSerializer(serializer);
@@ -73,10 +74,9 @@ public class RedisConfig {
         public CacheManager cacheManager(
                         RedisConnectionFactory connectionFactory,
                         ObjectMapper objectMapper) {
-                // Use Generic serializer for robust handling of arbitrary objects (despite
-                // deprecation)
-                org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer<Object> serializer = new org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer<>(
-                                objectMapper, Object.class);
+                // Use Generic serializer for robust handling of arbitrary objects
+                org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer serializer = new org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer(
+                                objectMapper);
 
                 RedisCacheConfiguration defaultConfig = RedisCacheConfiguration.defaultCacheConfig()
                                 .serializeKeysWith(RedisSerializationContext.SerializationPair

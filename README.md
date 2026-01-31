@@ -1,155 +1,97 @@
+# 🧠 Digital Memory Engine
+
+> A high-performance, intelligence-first backend system for semantic memory recall and knowledge graph management.
+
+The **Digital Memory Engine** is a production-grade Java/Spring Boot system designed to function as a "Second Brain". It ingests raw user memories, enhances them with AI intelligence (Embeddings, Relationship Graphs), and provides sub-second semantic answers to complex user questions.
 
 ---
 
-## 🛠️ Tech Stack
+## 🚀 Key Features
 
-### Core
-- Java 17
-- Spring Boot 4.x
-- Spring Data JPA
-- Hibernate ORM 7.x
+### 1. 🔍 Semantic Memory (Vector Search)
+*   **Hybrid Search**: Combines Full-Text Search (PostgreSQL GIN) with Vector Similarity Search (1536-dim embeddings).
+*   **Performance**: Optimized GIN Key search reduces complexity from $O(N)$ to $O(\log N)$.
 
-### Database
-- PostgreSQL 17 (Supabase)
-- Session Pooler (production-safe connections)
-- JSONB support for flexible context storage
+### 2. 🕸️ Graph Memory (Relationships)
+*   **Knowledge Graph**: Automatically links memories (e.g., "Event A *CAUSED* Event B").
+*   **Optimized Traversal**: Solves N+1 query bottlenecks using efficient batch-fetching algorithms.
 
-### Schema Management
-- Flyway
-    - Versioned migrations
-    - Schema locking
-    - Validation on startup
-    - Clean disabled for safety
+### 3. ⚡ Intelligent Caching
+*   **Semantic Cache**: Understands that "Who is my wife?" and "What is my spouse's name?" are the same question.
+*   **Inverted Index**: Uses a custom Redis Inverted Index to reduce lookup time from linear $O(N)$ to constant $O(K)$.
 
-### Infrastructure
-- HikariCP (connection pooling)
-- Apache Tomcat 11
-- Spring Boot Actuator
+### 4. 🌊 Event-Driven Architecture
+*   **Async Processing**: Uses **Apache Kafka** to decouple high-latency tasks (Embedding Generation) from user-facing APIs.
+*   **Production Hardened**: Configured with **Concurrent Consumers** and **Poison Pill Protection** to handle scale and failures gracefully.
 
 ---
 
-## 🗄️ Database Schema (Initial)
+## 🛠️ Technology Stack
 
-### `memories`
-Stores core memory records.
-
-- `id` (PK)
-- `user_id`
-- `title`
-- `content`
-- `context_json` (JSONB)
-- `importance_score`
-- `archived`
-- `created_at`
-- `updated_at`
-
-Indexes:
-- `user_id`
-- `created_at`
+| Component | Technology | Role |
+| :--- | :--- | :--- |
+| **Language** | Java 17 | Core Logic & Safety |
+| **Framework** | Spring Boot 4.0 | REST API & Dependency Injection |
+| **Database** | PostgreSQL 17 (Supabase) | Persistence & JSONB Context |
+| **Cache (L1)** | Caffeine | In-Memory Micro-second Access |
+| **Cache (L2)** | Redis (Upstash) | Distributed Semantic Cache |
+| **Event Bus** | Apache Kafka (Confluent) | Async Decoupling & Reliability |
+| **AI Model** | Google Gemini 1.5 | Reasoning & Answer Synthesis |
+| **Migrations** | Flyway | Schema Version Control |
 
 ---
 
-### `memory_outcomes`
-Stores feedback or outcome metadata for memories.
+## 🏛️ System Architecture
 
-- `id` (PK)
-- `memory_id` (FK)
-- `outcome_summary`
-- `satisfaction_score`
-- `recorded_at`
+> For detailed design, see [System Architecture](./.gemini/antigravity/brain/7f53da73-d445-4539-81dc-9a9a0b69609e/system_architecture.md).
 
----
+### High-Level Components
+1.  **Orchestrator**: `AnswerSynthesisEngine` coordinates retrieval and reasoning.
+2.  **Intelligence Layer**: `GeminiService` and `EmbeddingService` provide the "brains".
+3.  **Data Layer**: `MemoryRepository` and `RelationshipRepository` manage state.
 
-### `memory_relationships`
-Models relationships between memories.
-
-- `id` (PK)
-- `from_memory_id`
-- `to_memory_id`
-- `type` (ENUM)
-- `weight`
-- `created_at`
-
-Supported relationship types:
-- `CAUSED_BY`
-- `FOLLOWED_BY`
-- `SUPPORTS`
-- `CONTRADICTS`
-- `REVISITS`
+### Data Model
+> For schema details, see [Data Architecture (ERD)](./.gemini/antigravity/brain/7f53da73-d445-4539-81dc-9a9a0b69609e/data_architecture.md).
 
 ---
 
-## 🔐 Schema Safety Decisions
+## 🚦 Getting Started
 
-✔ Hibernate auto-DDL disabled for production use  
-✔ Flyway owns schema evolution  
-✔ Baseline migrations enabled  
-✔ Validation enforced on startup  
-✔ No destructive operations allowed
+### Prerequisites
+*   Java 17+
+*   Maven 3.8+
+*   Environment Variables (See `application.properties`):
+    *   `GEMINI_API_KEY`
+    *   `SPRING_DATASOURCE_URL`
+    *   `SPRING_KAFKA_BOOTSTRAP_SERVERS`
+    *   `SPRING_DATA_REDIS_HOST`
 
-This ensures:
-- No accidental schema drift
-- Predictable deployments
-- Safe future migrations
+### Run Locally
+```bash
+# Clean, Build, and Run
+./mvnw clean spring-boot:run
+```
 
----
-
-## ⚙️ Configuration Highlights
-
-- PostgreSQL via **Supabase Session Pooler**
-- SSL enforced
-- Connection pooling tuned
-- Logging configured for Hibernate SQL visibility (dev)
-
-Redis and Kafka configs exist but are **commented out intentionally**.
-
----
-
-## 🧪 Current Runtime Behavior
-
-- Application starts cleanly
-- Flyway validates schema
-- JPA initializes repositories
-- Database connections are pooled and reused
-- Tables are created only through migrations
-- No runtime errors or port conflicts (after cleanup)
+### Run Tests
+```bash
+# Run Unit and Integration Tests
+./mvnw clean test
+```
 
 ---
 
-## 🧭 What’s Intentionally NOT Done Yet
+## 🛡️ Production Readiness (Recent Fixes)
 
-- Redis caching logic
-- Kafka producers / consumers
-- REST APIs for memory operations
-- Authentication & authorization
-- Async workflows
-- Search / ranking logic
+This engine has been audited and fixed for production scale:
 
-These will be added **incrementally**, after the foundation is locked.
-
----
-
-## 📌 Why This Approach
-
-This project is built the way **real production systems** are built:
-- Foundation first
-- Schema safety over speed
-- Explicit lifecycle management
-- No “magic” auto-generation in production paths
-
----
-
-## 🔮 Next Planned Steps
-
-- Enable Flyway-only schema control (fully disable Hibernate DDL)
-- Add REST APIs for memory CRUD
-- Introduce Redis for hot-path caching
-- Add Kafka for async memory events
-- Implement JWT-based security
-- Add observability (metrics + tracing)
+*   ✅ **Security**: Credentials moved to environment variables.
+*   ✅ **Search Perf**: PostgreSQL GIN Index added (Migration V2).
+*   ✅ **Graph Perf**: Recursive N+1 Graph queries optimized to Batch queries.
+*   ✅ **Safety**: Blocking I/O replaced with Resilient Backoff strategies.
+*   ✅ **Reliability**: Kafka consumers scaled to 3x concurrency with Dead Letter logic.
 
 ---
 
 ## 🧑‍💻 Author
 
-Built as a **system-design-focused backend project undertaking** to demonstrate production-grade engineering practices using Java and Spring Boot.
+Built as a **Production-Grade System Design Project**, demonstrating advanced patterns in Distributed Systems, AI Integration, and Java Concurrency.

@@ -24,7 +24,7 @@ public class AuditService {
     private final AuditRepository auditRepository;
     private final ObjectMapper objectMapper;
 
-    @KafkaListener(topics = KafkaConfig.Topics.MEMORY_AUDIT, groupId = "audit-service-group")
+    @KafkaListener(topics = KafkaConfig.Topics.MEMORY_AUDIT, groupId = "audit-service-group", containerFactory = "kafkaListenerContainerFactory")
     @Transactional
     public void recordAuditEvent(MemoryDomainEvent event) {
         log.debug("Recording audit event: type={}, memoryId={}",

@@ -15,6 +15,6 @@ import lombok.NoArgsConstructor;
 public class SearchResult {
     private Long id;
     private String title;
-    private String contentSnippet;
+    private String content;
     private double similarityScore;
 }

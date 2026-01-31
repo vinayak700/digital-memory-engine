@@ -47,6 +47,7 @@ public class SemanticCacheService {
     // Cache namespace prefixes
     private static final String CACHE_INDEX_KEY = "semantic:index";
     private static final String CACHE_ENTRY_PREFIX = "semantic:entry:";
+    private static final String CACHE_INVERTED_INDEX_PREFIX = "semantic:inverted:";
 
     // Common stop words for question normalization
     private static final Set<String> QUESTION_STOP_WORDS = Set.of(
@@ -56,7 +57,11 @@ public class SemanticCacheService {
             "learn", "learned", "learning", "know", "knew", "knowing", "remember",
             "anything", "something", "nothing", "everything", "thing", "things",
             "related", "about", "regarding", "concerning", "to", "for", "with", "from",
-            "a", "an", "the", "and", "or", "but", "have", "has", "had", "any", "some");
+            "a", "an", "the", "and", "or", "but", "have", "has", "had", "any", "some", "in");
+
+    // Tech terms that are short but important
+    private static final Set<String> SHORT_TECH_TERMS = Set.of("go", "ai", "ml", "db", "sql", "io", "git", "aws",
+            "gcp");
 
     public SemanticCacheService(KeywordExtractionService keywordExtractionService,
             RedisTemplate<String, Object> redisTemplate) {
@@ -84,11 +89,13 @@ public class SemanticCacheService {
         }
 
         String[] words = question.toLowerCase()
-                .replaceAll("[^a-zA-Z0-9\\s]", " ")
+                .replaceAll("[^a-zA-Z0-9+#.\\s]", " ") // Preserve +, #, . for C++, C#, .NET
                 .split("\\s+");
 
         Set<String> keywords = Arrays.stream(words)
-                .filter(w -> w.length() > 2)
+                .map(String::trim)
+                .filter(w -> !w.isEmpty())
+                .filter(w -> w.length() > 2 || SHORT_TECH_TERMS.contains(w))
                 .filter(w -> !QUESTION_STOP_WORDS.contains(w))
                 .collect(Collectors.toCollection(HashSet::new));
 
@@ -124,7 +131,7 @@ public class SemanticCacheService {
 
     /**
      * Look up a semantically similar cached answer.
-     * Optimized with L1 cache and batch Redis operations.
+     * Optimized with Inverted Index (O(K)) and L1 cache.
      */
     public SemanticCacheResult lookup(String cacheName, String question) {
         if (!cacheEnabled) {
@@ -137,25 +144,41 @@ public class SemanticCacheService {
             return SemanticCacheResult.miss();
         }
 
-        String indexKey = CACHE_INDEX_KEY + ":" + cacheName;
-
         try {
-            // Step 1: Get entry keys from index
-            Set<Object> entryKeyObjs = redisTemplate.opsForSet().members(indexKey);
-            if (entryKeyObjs == null || entryKeyObjs.isEmpty()) {
-                log.debug("No entries in cache '{}'", cacheName);
+            // Step 1: Use Inverted Index to find candidate entry keys
+            // We construct the list of set keys to union:
+            // semantic:inverted:{cacheName}:{keyword}
+            List<String> invertedIndexKeys = queryKeywords.stream()
+                    .map(kw -> CACHE_INVERTED_INDEX_PREFIX + cacheName + ":" + kw)
+                    .collect(Collectors.toList());
+
+            if (invertedIndexKeys.isEmpty()) {
                 return SemanticCacheResult.miss();
             }
 
-            List<String> entryKeys = entryKeyObjs.stream()
+            // Union distinct parts to get all potentially relevant entry keys
+            Set<Object> candidateKeyObjs = redisTemplate.opsForSet().union(invertedIndexKeys);
+
+            if (candidateKeyObjs == null || candidateKeyObjs.isEmpty()) {
+                log.debug("No candidates found in inverted index for keywords: {}", queryKeywords);
+                return SemanticCacheResult.miss();
+            }
+
+            List<String> candidateKeys = candidateKeyObjs.stream()
                     .map(Object::toString)
                     .collect(Collectors.toList());
+
+            // Limit candidates to avoid potential explosion (though unlikely with natural
+            // language)
+            if (candidateKeys.size() > 500) {
+                candidateKeys = candidateKeys.subList(0, 500);
+            }
 
             // Step 2: Check L1 cache first, collect keys that need Redis lookup
             List<SemanticCacheEntry> entries = new ArrayList<>();
             List<String> keysToFetch = new ArrayList<>();
 
-            for (String key : entryKeys) {
+            for (String key : candidateKeys) {
                 SemanticCacheEntry l1Entry = l1Cache.getIfPresent(key);
                 if (l1Entry != null) {
                     entries.add(l1Entry);
@@ -164,16 +187,23 @@ public class SemanticCacheService {
                 }
             }
 
-            // Step 3: Batch fetch missing entries from Redis (single network call!)
+            // Step 3: Batch fetch missing entries from Redis
             if (!keysToFetch.isEmpty()) {
                 List<Object> redisResults = redisTemplate.opsForValue().multiGet(keysToFetch);
                 if (redisResults != null) {
                     for (int i = 0; i < keysToFetch.size(); i++) {
                         Object result = redisResults.get(i);
+                        String entryKey = keysToFetch.get(i);
                         if (result instanceof SemanticCacheEntry entry) {
                             entries.add(entry);
                             // Populate L1 cache
-                            l1Cache.put(keysToFetch.get(i), entry);
+                            l1Cache.put(entryKey, entry);
+                        } else if (result == null) {
+                            // FIX: Lazy Cleanup for Inverted Index Drift
+                            // Entry is gone from main store (TTL expired), but still in inverted index.
+                            // We schedule it for removal from inverted index sets for THIS query's
+                            // keywords.
+                            cleanupStaleInvertedIndexEntriesAsync(cacheName, entryKey);
                         }
                     }
                 }
@@ -200,7 +230,8 @@ public class SemanticCacheService {
                         bestMatch.getOriginalQuestion());
             }
 
-            log.debug("Cache MISS in {}ms: best similarity={}", elapsed, String.format("%.2f", bestSimilarity));
+            log.debug("Cache MISS in {}ms: best similarity={} (searched {} candidates)",
+                    elapsed, String.format("%.2f", bestSimilarity), candidateKeys.size());
             return SemanticCacheResult.miss();
 
         } catch (Exception e) {
@@ -224,15 +255,30 @@ public class SemanticCacheService {
 
         try {
             SemanticCacheEntry entry = new SemanticCacheEntry(question, keywords, value, relevanceScore);
+            // Construct a consistent key based on the sorted keywords to avoid duplicates
+            // for same intent
             String entryKey = CACHE_ENTRY_PREFIX + cacheName + ":" +
                     keywords.stream().sorted().collect(Collectors.joining("_"));
             String indexKey = CACHE_INDEX_KEY + ":" + cacheName;
 
-            // Store in Redis with TTL
-            redisTemplate.opsForValue().set(entryKey, entry, Duration.ofMinutes(ttlMinutes));
-            redisTemplate.opsForSet().add(indexKey, entryKey);
+            Duration ttl = Duration.ofMinutes(ttlMinutes);
 
-            // Also store in L1 cache
+            // 1. Store the actual entry
+            redisTemplate.opsForValue().set(entryKey, entry, ttl);
+
+            // 2. Add to global index (kept for admin/cleanup mostly)
+            redisTemplate.opsForSet().add(indexKey, entryKey);
+            redisTemplate.expire(indexKey, ttl); // Refresh TTL on the index itself
+
+            // 3. Update Inverted Indices for EACH keyword
+            for (String keyword : keywords) {
+                String invertedKey = CACHE_INVERTED_INDEX_PREFIX + cacheName + ":" + keyword;
+                redisTemplate.opsForSet().add(invertedKey, entryKey);
+                // Set TTL on the inverted index key as well (slide it forward)
+                redisTemplate.expire(invertedKey, ttl);
+            }
+
+            // 4. Also store in L1 cache
             l1Cache.put(entryKey, entry);
 
             log.info("Stored in cache '{}': keywords={}", cacheName, keywords);
@@ -256,10 +302,60 @@ public class SemanticCacheService {
                 }
             }
             redisTemplate.delete(indexKey);
+
+            // Also attempt to clean up inverted indexes using keys scanning (admin op)
+            // Note: In a massive production cluster, we might rely on TTLs instead
+            // FIX: Safer bulk delete using SCAN instead of KEYS
+            try {
+                Set<String> invertedKeys = scanKeys(CACHE_INVERTED_INDEX_PREFIX + cacheName + ":*");
+                if (invertedKeys != null && !invertedKeys.isEmpty()) {
+                    redisTemplate.delete(invertedKeys);
+                }
+            } catch (Exception e) {
+                log.warn("Could not bulk delete inverted keys, relying on TTL: {}", e.getMessage());
+            }
+
             log.info("Cleared cache '{}'", cacheName);
+
         } catch (Exception e) {
             log.warn("Error clearing cache: {}", e.getMessage());
         }
+    }
+
+    /**
+     * Remove a stale entry from inverted indices.
+     */
+    private void cleanupStaleInvertedIndexEntriesAsync(String cacheName, String entryKey) {
+        log.debug("Cleaning up stale entry {} from inverted index for cache '{}'", entryKey, cacheName);
+        // The entry key format is: semantic:entry:{cacheName}:{keyword1}_{keyword2}_...
+        String prefix = CACHE_ENTRY_PREFIX + cacheName + ":";
+        if (entryKey.startsWith(prefix)) {
+            String keywordsPart = entryKey.substring(prefix.length());
+            String[] keywordsArray = keywordsPart.split("_");
+            for (String kw : keywordsArray) {
+                String invertedKey = CACHE_INVERTED_INDEX_PREFIX + cacheName + ":" + kw;
+                redisTemplate.opsForSet().remove(invertedKey, entryKey);
+            }
+        }
+    }
+
+    /**
+     * Safely scan for keys matching a pattern.
+     */
+    private Set<String> scanKeys(String pattern) {
+        Set<String> keys = new HashSet<>();
+        redisTemplate.execute((org.springframework.data.redis.connection.RedisConnection connection) -> {
+            try (org.springframework.data.redis.core.Cursor<byte[]> cursor = connection.keyCommands().scan(
+                    org.springframework.data.redis.core.ScanOptions.scanOptions().match(pattern).count(100).build())) {
+                while (cursor.hasNext()) {
+                    keys.add(new String(cursor.next()));
+                }
+            } catch (Exception e) {
+                log.error("Error scanning keys: {}", e.getMessage());
+            }
+            return null;
+        });
+        return keys;
     }
 
     /**

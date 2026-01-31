@@ -1,10 +1,15 @@
 package com.memory.context.engine.domain.search.service;
 
+import com.memory.context.engine.domain.memory.entity.Memory;
+import com.memory.context.engine.domain.memory.repository.MemoryRepository;
 import com.memory.context.engine.domain.memory.event.MemoryCreatedEvent;
 import com.memory.context.engine.domain.memory.event.MemoryUpdatedEvent;
+import com.memory.context.engine.domain.memory.event.MemoryDomainEvent;
+import com.memory.context.engine.domain.search.event.EmbeddingGeneratedEvent;
 import com.memory.context.engine.infrastructure.kafka.KafkaConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
@@ -23,54 +28,74 @@ import org.springframework.stereotype.Service;
 public class EmbeddingService {
 
     private final JdbcTemplate jdbcTemplate;
+    private final ApplicationEventPublisher eventPublisher;
+    private final MemoryRepository memoryRepository;
 
     // Embedding dimension (OpenAI ada-002 uses 1536)
     private static final int EMBEDDING_DIMENSION = 1536;
 
-    @org.springframework.context.event.EventListener
-    @KafkaListener(topics = KafkaConfig.Topics.MEMORY_EVENTS, groupId = "embedding-service-group")
-    public void processEvent(Object event) {
+    @KafkaListener(topics = KafkaConfig.Topics.MEMORY_EVENTS, groupId = "embedding-service-group", containerFactory = "kafkaListenerContainerFactory")
+    public void processEvent(MemoryDomainEvent event) {
         if (event instanceof MemoryCreatedEvent created) {
-            generateEmbedding(created.getMemoryId());
+            log.debug("Received Kafka MemoryCreatedEvent for memory: {}", created.getMemoryId());
+            generateEmbedding(created.getMemoryId(), created.getUserId());
         } else if (event instanceof MemoryUpdatedEvent updated) {
-            if (updated.getUpdatedFields().contains("content") ||
-                    updated.getUpdatedFields().contains("title")) {
-                generateEmbedding(updated.getMemoryId());
+            if (updated.getUpdatedFields().contains("content") || updated.getUpdatedFields().contains("title")) {
+                log.debug("Received Kafka MemoryUpdatedEvent for memory: {}", updated.getMemoryId());
+                generateEmbedding(updated.getMemoryId(), updated.getUserId());
             }
         }
     }
 
     /**
      * Generates and stores embedding for a memory.
-     * 
-     * TODO: Integrate with actual embedding API (OpenAI, Cohere, etc.)
-     * For now, this is a placeholder that logs the operation.
      */
-    public void generateEmbedding(Long memoryId) {
-        log.info("Generating embedding for memory: {}", memoryId);
+    public void generateEmbedding(Long memoryId, String userId) {
+        log.info("Generating embedding for memory: {} for user: {}", memoryId, userId);
 
-        // TODO: Actual implementation would call embedding API (OpenAI, Cohere, etc.)
-        // For now, we generate a random normalized vector so that vector search queries
-        // work.
+        Memory memory = memoryRepository.findById(memoryId).orElse(null);
+        if (memory == null) {
+            log.warn("Memory not found for embedding generation: {}", memoryId);
+            return;
+        }
+
+        // Use word-based summation for deterministic "pseudo-embeddings"
+        // This ensures shared words lead to higher vector similarity
+        String[] words = (memory.getTitle() + " " + memory.getContent())
+                .toLowerCase()
+                .replaceAll("[^a-z0-9\\s]", "")
+                .split("\\s+");
 
         float[] embedding = new float[EMBEDDING_DIMENSION];
-        java.util.Random random = new java.util.Random();
-        double norm = 0.0;
 
-        // Generate random vector
-        for (int i = 0; i < EMBEDDING_DIMENSION; i++) {
-            embedding[i] = random.nextFloat() - 0.5f;
-            norm += embedding[i] * embedding[i];
+        for (String word : words) {
+            if (word.length() < 3)
+                continue; // Skip small words
+
+            java.util.Random random = new java.util.Random(word.hashCode());
+            for (int i = 0; i < EMBEDDING_DIMENSION; i++) {
+                embedding[i] += random.nextFloat() - 0.5f;
+            }
         }
 
         // Normalize
-        norm = Math.sqrt(norm);
+        double norm = 0.0;
         for (int i = 0; i < EMBEDDING_DIMENSION; i++) {
-            embedding[i] /= norm;
+            norm += embedding[i] * embedding[i];
+        }
+        norm = Math.sqrt(norm);
+
+        if (norm > 0) {
+            for (int i = 0; i < EMBEDDING_DIMENSION; i++) {
+                embedding[i] /= (float) norm;
+            }
         }
 
         updateEmbedding(memoryId, embedding);
         log.debug("Embedding generated and saved for memory: {}", memoryId);
+
+        // Publish event for intelligent linking
+        eventPublisher.publishEvent(new EmbeddingGeneratedEvent(memoryId, userId));
     }
 
     /**

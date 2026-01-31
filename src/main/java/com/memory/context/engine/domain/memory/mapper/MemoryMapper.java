@@ -13,26 +13,26 @@ import java.time.ZoneOffset;
 @Component
 public class MemoryMapper {
 
-    /**
-     * Converts a Memory entity to its API response representation.
-     *
-     * @param memory the entity to convert
-     * @return the response DTO
-     */
-    public MemoryResponse toResponse(Memory memory) {
-        return MemoryResponse.builder()
-                .id(memory.getId())
-                .title(memory.getTitle())
-                .content(memory.getContent())
-                .context(memory.getContext())
-                .importanceScore(memory.getImportanceScore())
-                .archived(memory.isArchived())
-                .createdAt(memory.getCreatedAt() != null
-                        ? memory.getCreatedAt().atOffset(ZoneOffset.UTC)
-                        : null)
-                .updatedAt(memory.getUpdatedAt() != null
-                        ? memory.getUpdatedAt().atOffset(ZoneOffset.UTC)
-                        : null)
-                .build();
-    }
+        /**
+         * Converts a Memory entity to its API response representation.
+         *
+         * @param memory the entity to convert
+         * @return the response DTO
+         */
+        public MemoryResponse toResponse(Memory memory) {
+                return MemoryResponse.builder()
+                                .id(memory.getId())
+                                .title(memory.getTitle())
+                                .content(memory.getContent())
+                                .context(memory.getContext())
+                                .importanceScore(memory.getImportanceScore())
+                                .archived(memory.isArchived())
+                                .createdAt(memory.getCreatedAt() != null
+                                                ? memory.getCreatedAt().atOffset(ZoneOffset.UTC)
+                                                : null)
+                                .updatedAt(memory.getUpdatedAt() != null
+                                                ? memory.getUpdatedAt().atOffset(ZoneOffset.UTC)
+                                                : null)
+                                .build();
+        }
 }

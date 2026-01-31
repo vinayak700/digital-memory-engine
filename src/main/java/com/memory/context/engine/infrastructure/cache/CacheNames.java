@@ -11,4 +11,6 @@ public final class CacheNames {
 
     public static final String MEMORIES = "memories";
     public static final String MEMORY_LISTS = "memory-lists";
+    public static final String GRAPH = "graph-traversal";
+    public static final String SEARCH = "search-results";
 }

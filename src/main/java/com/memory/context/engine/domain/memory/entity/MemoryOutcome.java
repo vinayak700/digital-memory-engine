@@ -9,6 +9,8 @@ import java.time.Instant;
 @Table(name = "memory_outcomes")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor
+@Builder
 public class MemoryOutcome {
 
     @Id

@@ -7,6 +7,7 @@ import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.Set;
 
 @Entity
 @Table(name = "memories", indexes = {
@@ -37,6 +38,12 @@ public class Memory {
 
     @Column(nullable = false)
     private int importanceScore;
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(name = "memory_topics", joinColumns = @JoinColumn(name = "memory_id"), inverseJoinColumns = @JoinColumn(name = "topic_id"))
+    @Builder.Default
+    @ToString.Exclude
+    private Set<com.memory.context.engine.domain.topic.entity.Topic> topics = new java.util.HashSet<>();
 
     @Column(nullable = false)
     @Builder.Default

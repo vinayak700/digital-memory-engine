@@ -6,5 +6,6 @@ public enum RelationshipType {
     FOLLOWED_BY,
     SUPPORTS,
     CONTRADICTS,
-    REVISITS
+    REVISITS,
+    AUTO_LINKED
 }

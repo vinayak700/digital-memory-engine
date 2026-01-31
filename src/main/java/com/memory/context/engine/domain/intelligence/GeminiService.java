@@ -1,6 +1,7 @@
 package com.memory.context.engine.domain.intelligence;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.memory.context.engine.domain.memory.entity.Memory;
 import com.memory.context.engine.domain.intelligence.cache.SemanticCacheResult;
 import com.memory.context.engine.domain.intelligence.cache.SemanticCacheService;
 import lombok.Data;
@@ -16,6 +17,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Service to interact with Google's Gemini API.
@@ -73,6 +75,44 @@ public class GeminiService {
 
         return answer;
     }
+
+    /**
+     * Uses Gemini to decide if two memories should be intelligently linked.
+     */
+    public boolean shouldLink(Memory m1, Memory m2) {
+        if (apiKey == null || apiKey.isBlank()) {
+            return false;
+        }
+
+        String prompt = """
+                You are an expert at identifying semantic and contextual relationships between pieces of information.
+                Your task is to decide if two memories should be "Intellectually Linked" in a digital personal knowledge base.
+
+                Memory 1:
+                Title: %s
+                Content: %s
+
+                Memory 2:
+                Title: %s
+                Content: %s
+
+                Instructions:
+                - Link them if they are about the same specific topic, project, person, or concept.
+                - Link them if one explains or provides context for the other.
+                - Link them if they share a strong conceptual connection (e.g., "JVM" and "Garbage Collection").
+                - DO NOT link them if they are only loosely related by general category (e.g., just both being about "Technology" is too broad).
+                - DO NOT link them if they are unrelated.
+
+                OUTPUT FORMAT:
+                Return ONLY "YES" or "NO".
+                Do not include any other text or explanation.
+                """
+                .formatted(m1.getTitle(), m1.getContent(), m2.getTitle(), m2.getContent());
+
+        String response = callGemini(prompt, true);
+        return response != null && response.trim().equalsIgnoreCase("YES");
+    }
+                
 
     /**
      * Extracts search terms from the question using the LLM to understand intent.
@@ -157,22 +197,41 @@ public class GeminiService {
                 }
 
                 return isSearchQuery ? "" : "I couldn't generate an answer from the AI model.";
+
             } catch (org.springframework.web.client.HttpServerErrorException.ServiceUnavailable
                     | org.springframework.web.client.HttpClientErrorException.TooManyRequests e) {
-                log.warn("Gemini API overloaded or rate limited (Attempt {}/{}). Retrying in {} ms...", attempt,
-                        maxRetries, retryDelay);
+
+                log.warn("Gemini API overloaded or rate limited (Attempt {}/{}). Retrying...", attempt, maxRetries);
+
                 if (attempt == maxRetries) {
                     log.error("Gemini API failed after {} attempts.", maxRetries, e);
                     return isSearchQuery ? ""
                             : "Sorry, the AI service is currently overloaded. Please try again later.";
                 }
+
+                // Compliance: Respect 'Retry-After' header if present
+                long waitTime = retryDelay;
+                String retryAfter = e.getResponseHeaders() != null ? e.getResponseHeaders().getFirst("Retry-After")
+                        : null;
+                if (retryAfter != null) {
+                    try {
+                        waitTime = Long.parseLong(retryAfter) * 1000;
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
+
                 try {
-                    Thread.sleep(retryDelay);
+                    // Safe Wait: Allow thread to be interrupted (e.g. by container shutdown)
+                    TimeUnit.MILLISECONDS.sleep(waitTime);
                 } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
+                    Thread.currentThread().interrupt(); // Restore interrupt status
+                    log.warn("Operation interrupted during retry wait.");
                     return isSearchQuery ? "" : "Operation interrupted.";
                 }
-                retryDelay *= 2; // Exponential backoff
+
+                // Exponential backoff with jitter
+                retryDelay = (long) (retryDelay * (1.5 + Math.random() * 0.5));
+
             } catch (Exception e) {
                 log.error("Error calling Gemini API: ", e);
                 return isSearchQuery ? "" : "Sorry, I encountered an error while communicating with the AI service.";

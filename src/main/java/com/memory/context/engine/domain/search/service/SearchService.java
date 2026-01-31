@@ -46,12 +46,18 @@ public class SearchService {
      * Finds memories similar to a given memory.
      */
     public List<SearchResult> findSimilar(Long memoryId, int limit) {
-        String userId = getCurrentUser();
+        return findSimilarForUser(memoryId, getCurrentUser(), limit);
+    }
+
+    /**
+     * Finds memories similar to a given memory for a specific user.
+     */
+    public List<SearchResult> findSimilarForUser(Long memoryId, String userId, int limit) {
         log.info("Finding similar memories to: {} for user: {}", memoryId, userId);
 
         return jdbcTemplate.query(
                 """
-                        SELECT m2.id, m2.title, LEFT(m2.content, 200) as snippet,
+                        SELECT m2.id, m2.title, m2.content,
                                1 - (m1.embedding <=> m2.embedding) as similarity
                         FROM memories m1
                         JOIN memories m2 ON m1.id != m2.id
@@ -65,7 +71,7 @@ public class SearchService {
                 (rs, rowNum) -> SearchResult.builder()
                         .id(rs.getLong("id"))
                         .title(rs.getString("title"))
-                        .contentSnippet(rs.getString("snippet"))
+                        .content(rs.getString("content"))
                         .similarityScore(rs.getDouble("similarity"))
                         .build(),
                 userId, memoryId, limit);

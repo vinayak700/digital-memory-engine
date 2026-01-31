@@ -47,7 +47,7 @@ public class VectorSearchStrategy implements SearchStrategy {
   private List<SearchResult> executeFullTextSearch(String query, String userId, int limit) {
     return jdbcTemplate.query(
         """
-            SELECT id, title, LEFT(content, 200) as snippet,
+            SELECT id, title, content,
                    ts_rank(
                        setweight(to_tsvector('english', COALESCE(title, '')), 'A') ||
                        setweight(to_tsvector('english', COALESCE(content, '')), 'B'),
@@ -66,7 +66,7 @@ public class VectorSearchStrategy implements SearchStrategy {
         (rs, rowNum) -> SearchResult.builder()
             .id(rs.getLong("id"))
             .title(rs.getString("title"))
-            .contentSnippet(rs.getString("snippet"))
+            .content(rs.getString("content"))
             .similarityScore(Math.min(1.0, rs.getDouble("similarity") + 0.5))
             .build(),
         query, userId, query, limit);
@@ -96,7 +96,7 @@ public class VectorSearchStrategy implements SearchStrategy {
     params.add(limit);
 
     String sql = String.format("""
-        SELECT id, title, LEFT(content, 200) as snippet, 0.7 as similarity
+        SELECT id, title, content, 0.7 as similarity
         FROM memories
         WHERE user_id = ?
           AND archived = false
@@ -109,7 +109,7 @@ public class VectorSearchStrategy implements SearchStrategy {
         (rs, rowNum) -> SearchResult.builder()
             .id(rs.getLong("id"))
             .title(rs.getString("title"))
-            .contentSnippet(rs.getString("snippet"))
+            .content(rs.getString("content"))
             .similarityScore(rs.getDouble("similarity"))
             .build(),
         params.toArray());
