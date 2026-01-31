@@ -92,12 +92,6 @@
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>
         </dependency>
-        <!-- Spring Shell for CLI Interface -->
-        <dependency>
-            <groupId>org.springframework.shell</groupId>
-            <artifactId>spring-shell-starter</artifactId>
-            <version>3.4.1</version>
-        </dependency>
         <!-- Caffeine for high-performance in-memory caching -->
         <dependency>
             <groupId>com.github.ben-manes.caffeine</groupId>

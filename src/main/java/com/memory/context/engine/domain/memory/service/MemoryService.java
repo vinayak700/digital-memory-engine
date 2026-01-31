@@ -13,6 +13,8 @@ import com.memory.context.engine.domain.memory.event.MemoryCreatedEvent;
 import com.memory.context.engine.domain.memory.event.MemoryUpdatedEvent;
 import com.memory.context.engine.domain.memory.mapper.MemoryMapper;
 import com.memory.context.engine.domain.memory.repository.MemoryRepository;
+import com.memory.context.engine.domain.relationship.repository.MemoryRelationshipRepository;
+import com.memory.context.engine.domain.audit.repository.AuditRepository;
 import com.memory.context.engine.infrastructure.cache.CacheNames;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -41,6 +43,8 @@ import java.util.Set;
 public class MemoryService {
 
     private final MemoryRepository memoryRepository;
+    private final MemoryRelationshipRepository relationshipRepository;
+    private final AuditRepository auditRepository;
     private final MemoryMapper memoryMapper;
     private final ApplicationEventPublisher eventPublisher;
     private final KeywordExtractionService keywordExtractionService;
@@ -210,5 +214,40 @@ public class MemoryService {
                 .getContext()
                 .getAuthentication()
                 .getName();
+    }
+
+    /**
+     * Cleans up all user-related data (memories, relationships, audit logs) and
+     * evicts relevant caches.
+     */
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = CacheNames.MEMORIES, allEntries = true),
+            @CacheEvict(value = CacheNames.MEMORY_LISTS, allEntries = true),
+            @CacheEvict(value = CacheNames.SEARCH, allEntries = true),
+            @CacheEvict(value = CacheNames.GRAPH, allEntries = true)
+    })
+    public void cleanupUserData(String userId) {
+        log.info("Cleaning up data for user: {}", userId);
+
+        // 1. Find all memories for this user to identify relationships
+        List<Memory> memories = memoryRepository.findAllByUserId(userId);
+        if (!memories.isEmpty()) {
+            List<Long> memoryIds = memories.stream()
+                    .map(Memory::getId)
+                    .collect(java.util.stream.Collectors.toList());
+            log.debug("Deleting relationships for {} memories", memoryIds.size());
+            relationshipRepository.deleteAllByMemoryIds(memoryIds);
+        }
+
+        // 2. Clear memories
+        log.debug("Deleting memories for user: {}", userId);
+        memoryRepository.deleteByUserId(userId);
+
+        // 3. Clear audit logs
+        log.debug("Deleting audit logs for user: {}", userId);
+        auditRepository.deleteByUserId(userId);
+
+        log.info("Successfully cleaned up all data for user: {}", userId);
     }
 }

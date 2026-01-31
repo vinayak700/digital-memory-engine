@@ -3,7 +3,9 @@ package com.memory.context.engine.domain.relationship.repository;
 import com.memory.context.engine.domain.relationship.entity.MemoryRelationship;
 import com.memory.context.engine.domain.relationship.entity.RelationshipType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 
@@ -40,4 +42,11 @@ public interface MemoryRelationshipRepository extends JpaRepository<MemoryRelati
                         Long sourceId,
                         Long targetId,
                         RelationshipType type);
+
+        @Modifying
+        @Query("""
+                        DELETE FROM MemoryRelationship r
+                        WHERE r.sourceMemory.id IN :memoryIds OR r.targetMemory.id IN :memoryIds
+                        """)
+        void deleteAllByMemoryIds(@Param("memoryIds") java.util.Collection<Long> memoryIds);
 }

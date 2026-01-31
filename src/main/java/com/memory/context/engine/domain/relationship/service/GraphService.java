@@ -18,7 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -31,10 +30,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class GraphService {
 
-
-
-    private final MemoryRelationshipRepository relationshipRepository;
     private final MemoryRepository memoryRepository;
+    private final MemoryRelationshipRepository relationshipRepository;
 
     @Transactional
     @CacheEvict(value = CacheNames.GRAPH, allEntries = true)

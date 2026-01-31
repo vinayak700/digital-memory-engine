@@ -94,6 +94,7 @@ public class IntelligentLinkingService {
                     relationshipRepository.save(relationship);
                     log.info("AI-Linked memory {} to {} (Similarity: {})", memoryId, result.getId(),
                             result.getSimilarityScore());
+
                     linksCreated++;
                 }
             }

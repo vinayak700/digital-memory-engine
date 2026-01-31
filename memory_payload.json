@@ -1,5 +1,0 @@
-{
-    "title": "The Java Virtual Machine (JVM) - Java's Secret Superpower",
-    "content": "The JVM is the runtime engine that executes compiled Java bytecode, providing the \"write once, run anywhere\" capability that made Java revolutionary. It's not just an interpreter—it's a sophisticated system with Just-In-Time (JIT) compilation, garbage collection, memory management, and security features. Understanding the JVM means understanding how Java really works under the hood: from class loading and bytecode verification to hotspot optimization and garbage collection algorithms (like G1, ZGC, Shenandoah). Modern JVMs can even outperform natively compiled code in some scenarios through adaptive optimization. Key Aspects: Bytecode execution and JIT compilation. Memory structure (heap, stack, method area, PC registers). Garbage collection algorithms and tuning. Class loading mechanism and security sandbox. Performance monitoring and troubleshooting tools (jvisualvm, jstack, jmap). JVM languages beyond Java (Kotlin, Scala, Groovy)",
-    "importanceScore": 8
-}

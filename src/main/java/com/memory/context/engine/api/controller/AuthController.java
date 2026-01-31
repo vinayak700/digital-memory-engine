@@ -18,6 +18,7 @@ public class AuthController {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final com.memory.context.engine.domain.memory.service.MemoryService memoryService;
 
     @PostMapping("/signup")
     public ResponseEntity<?> signup(@RequestBody SignupRequest request) {
@@ -51,6 +52,10 @@ public class AuthController {
         if (user == null) {
             return ResponseEntity.status(401).body(java.util.Map.of("message", "Not authenticated"));
         }
+
+        // Cascading delete for user data
+        memoryService.cleanupUserData(user.getUsername());
+
         userRepository.delete(user);
         log.info("User deleted account: {}", user.getUsername());
         return ResponseEntity.ok(java.util.Map.of("message", "Account deleted successfully"));
