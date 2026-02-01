@@ -1,0 +1,32 @@
+services:
+  # Backend Web Service
+  - type: web
+    name: digital-memory-engine
+    env: docker
+    dockerContext: .
+    dockerfilePath: Dockerfile
+    plan: free
+    region: singapore # Closest to Mumbai if Mumbai is not available
+    envVars:
+      - key: PORT
+        value: 8082
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DB_URL
+        sync: false
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: REDIS_HOST
+        sync: false
+      - key: REDIS_PORT
+        sync: false
+      - key: REDIS_PASSWORD
+        sync: false
+      - key: KAFKA_USER
+        sync: false
+      - key: KAFKA_PASSWORD
+        sync: false
+      - key: SEMANTIC_CACHE_SIMILARITY_THRESHOLD
+        sync: false
