@@ -14,39 +14,29 @@ In our **Event-Driven** system:
 
 ```mermaid
 graph LR
-    subgraph ClientSide
-        User["User / Frontend"]
+    User(User)
+    
+    subgraph API
+        Controller(Memory Controller)
+        Producer(Kafka Producer)
     end
 
-    subgraph APILayer ["REST API (Synchronous)"]
-        Controller["MemoryController"]
-        Producer["MemoryEventProducer"]
+    subgraph Kafka
+        Topic(Topic Memory Events)
     end
 
-    subgraph Messaging ["Confluent Kafka Cloud"]
-        Topic["Topic: memory-events"]
-        Partitions["Partitions: 0, 1, 2..."]
+    subgraph Consumer
+        Worker(Memory Consumer)
+        AI(AI Processing)
     end
 
-    subgraph WorkerLayer ["Async Consumers"]
-        Consumer["MemoryEventConsumer"]
-        
-        subgraph Operations
-            Embed["Generate Embeddings"]
-            Keywords["Extract Keywords"]
-            Graph["Link Relationships"]
-        end
-    end
+    User --> Controller
+    Controller --> Producer
+    Producer --> Topic
+    Controller -.-> User
 
-    User -->|"POST /memories"| Controller
-    Controller -->|"1. Save to DB"| Producer
-    Producer -->|"2. Publish Event"| Topic
-    Controller -->>|"3. Return 201 Created"| User
-
-    Topic -->|"4. Push Message"| Consumer
-    Consumer --> Embed
-    Consumer --> Keywords
-    Consumer --> Graph
+    Topic --> Worker
+    Worker --> AI
 ```
 
 ## 3. How It Works (Step-by-Step)
